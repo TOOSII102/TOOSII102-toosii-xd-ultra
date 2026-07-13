@@ -1,0 +1,15 @@
+{
+  "name": "toosii-xd-ultra",
+  "version": "1.0.0",
+  "description": "TOOSII-XD-ULTRA — Baileys WhatsApp bot with prefix commands",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "pino": "^9.4.0",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.5"
+  }
+}
