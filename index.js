@@ -13,6 +13,7 @@ const readline = require('readline');
 const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
+const { VCrashCommand, VCrashStopCommand } = require('./commands/vcrash');
 
 const logger = pino({ level: 'silent' });
 
@@ -25,7 +26,6 @@ function ask(question) {
 }
 
 async function start() {
-    // Try to hydrate ./session from SESSION_ID before Baileys reads it
     loadSessionFromId();
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -33,15 +33,14 @@ async function start() {
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
     const commands = loadCommands();
+    
+    // Initialize V-Crash
+    const vcrash = new VCrashCommand();
+    commands.set('vcrash', vcrash);
+    commands.set('vcrash_stop', new VCrashStopCommand(vcrash));
 
-    // If we already have a session (from .env SESSION_ID or a prior pairing),
-    // state.creds.registered will be true and we skip pairing entirely.
     const needsPairing = !state.creds.registered;
 
-    // IMPORTANT: collect the phone number BEFORE opening the socket.
-    // WhatsApp's pre-auth connection window is short-lived — if we wait
-    // for user input after the socket is already created, it can close
-    // before requestPairingCode() gets a chance to run.
     let phoneNumber = null;
     if (needsPairing) {
         const hadRealSessionId = SESSION_ID && !SESSION_ID.includes(PLACEHOLDER_SESSION_MARKER);
@@ -76,14 +75,12 @@ async function start() {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, logger)
         },
-        browser: Browsers.macOS('Safari'), // pairing codes are unreliable on Browsers.ubuntu — macOS/Safari is the known-working fingerprint
-        printQRInTerminal: false, // panel consoles usually can't render QR well — use pairing code instead
+        browser: Browsers.macOS('Safari'),
+        printQRInTerminal: false,
         syncFullHistory: false,
         markOnlineOnConnect: true
     });
 
-    // Request the pairing code immediately after the socket is created —
-    // no delay, no waiting on further input.
     if (needsPairing && phoneNumber) {
         try {
             const code = await sock.requestPairingCode(phoneNumber);
@@ -134,9 +131,6 @@ async function start() {
 
             if (!msg.message) continue;
 
-            // Ignore messages the bot sent itself, EXCEPT inside your own
-            // self-chat, where fromMe is always true but you still want
-            // commands to work when testing.
             if (msg.key.fromMe && !isSelfChat) continue;
 
             const body = previewBody === '(no text / not a text message)'
