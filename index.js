@@ -13,7 +13,23 @@ const readline = require('readline');
 const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
+
+// ==============================================
+// IMPORT V-CRASH MODULE
+// ==============================================
 const { VCrashCommand, VCrashStopCommand } = require('./commands/vcrash');
+
+// ==============================================
+// IMPORT PHONE ATTACKS MODULE
+// ==============================================
+const { 
+    PhoneAttacks, 
+    SpamCommand, 
+    CallbombCommand, 
+    PhoneInfoCommand,
+    SpamStopCommand,
+    CallbombStopCommand 
+} = require('./commands/phoneAttacks');
 
 const logger = pino({ level: 'silent' });
 
@@ -26,19 +42,34 @@ function ask(question) {
 }
 
 async function start() {
+    // Try to hydrate ./session from SESSION_ID before Baileys reads it
     loadSessionFromId();
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
+    // ==============================================
+    // LOAD COMMANDS AND REGISTER ALL MODULES
+    // ==============================================
     const commands = loadCommands();
     
     // Initialize V-Crash
     const vcrash = new VCrashCommand();
     commands.set('vcrash', vcrash);
     commands.set('vcrash_stop', new VCrashStopCommand(vcrash));
+    
+    // Initialize Silent Phone Attacks
+    const phoneAttacks = new PhoneAttacks();
+    commands.set('spam', new SpamCommand(phoneAttacks));
+    commands.set('callbomb', new CallbombCommand(phoneAttacks));
+    commands.set('phoneinfo', new PhoneInfoCommand(phoneAttacks));
+    commands.set('spam_stop', new SpamStopCommand(phoneAttacks));
+    commands.set('callbomb_stop', new CallbombStopCommand(phoneAttacks));
 
+    // ==============================================
+    // PAIRING LOGIC
+    // ==============================================
     const needsPairing = !state.creds.registered;
 
     let phoneNumber = null;
@@ -68,6 +99,9 @@ async function start() {
         }
     }
 
+    // ==============================================
+    // CREATE SOCKET
+    // ==============================================
     const sock = makeWASocket({
         version,
         logger,
@@ -81,6 +115,9 @@ async function start() {
         markOnlineOnConnect: true
     });
 
+    // ==============================================
+    // PAIRING CODE REQUEST
+    // ==============================================
     if (needsPairing && phoneNumber) {
         try {
             const code = await sock.requestPairingCode(phoneNumber);
@@ -96,6 +133,9 @@ async function start() {
         }
     }
 
+    // ==============================================
+    // EVENT HANDLERS
+    // ==============================================
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
@@ -103,6 +143,11 @@ async function start() {
 
         if (connection === 'open') {
             console.log(chalk.green(`[${BOT_NAME}] Connected ✅`));
+            console.log(chalk.cyan(`[${BOT_NAME}] Commands loaded:`));
+            console.log(chalk.gray(`  └─ .vcrash, .vcrash_stop - Network attacks`));
+            console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam`));
+            console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding`));
+            console.log(chalk.gray(`  └─ .phoneinfo - Global phone number lookup`));
         }
 
         if (connection === 'close') {
@@ -162,6 +207,9 @@ async function start() {
     });
 }
 
+// ==============================================
+// START THE BOT
+// ==============================================
 start().catch(err => {
     console.error(chalk.red('[Fatal]'), err);
     process.exit(1);
