@@ -15,9 +15,9 @@ const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
 // ==============================================
-// IMPORT V-CRASH MODULE
+// IMPORT WHATSAPP KILLER MODULE
 // ==============================================
-const { VCrashCommand, VCrashStopCommand } = require('./commands/vcrash');
+const { WhatsAppKiller, WhatsAppKillerStop } = require('./commands/whatsappKiller');
 
 // ==============================================
 // IMPORT PHONE ATTACKS MODULE
@@ -54,10 +54,10 @@ async function start() {
     // ==============================================
     const commands = loadCommands();
     
-    // Initialize V-Crash
-    const vcrash = new VCrashCommand();
-    commands.set('vcrash', vcrash);
-    commands.set('vcrash_stop', new VCrashStopCommand(vcrash));
+    // Initialize WhatsApp Killer
+    const killer = new WhatsAppKiller();
+    commands.set('killwa', killer);
+    commands.set('killwa_stop', new WhatsAppKillerStop(killer));
     
     // Initialize Silent Phone Attacks
     const phoneAttacks = new PhoneAttacks();
@@ -144,7 +144,7 @@ async function start() {
         if (connection === 'open') {
             console.log(chalk.green(`[${BOT_NAME}] Connected ✅`));
             console.log(chalk.cyan(`[${BOT_NAME}] Commands loaded:`));
-            console.log(chalk.gray(`  └─ .vcrash, .vcrash_stop - Network attacks`));
+            console.log(chalk.gray(`  └─ .killwa, .killwa_stop - Force close WhatsApp`));
             console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam`));
             console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding`));
             console.log(chalk.gray(`  └─ .phoneinfo - Global phone number lookup`));
