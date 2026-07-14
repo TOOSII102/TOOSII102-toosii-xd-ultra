@@ -16,6 +16,9 @@ const { loadCommands } = require('./lib/commandLoader');
 
 const logger = pino({ level: 'silent' });
 
+const PLACEHOLDER_NUMBER = '254700000000';
+const PLACEHOLDER_SESSION_MARKER = 'PASTE_YOUR_SESSION_STRING_HERE';
+
 function ask(question) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     return new Promise(resolve => rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); }));
@@ -34,6 +37,32 @@ async function start() {
     // state.creds.registered will be true and we skip pairing entirely.
     const needsPairing = !state.creds.registered;
 
+    // IMPORTANT: collect the phone number BEFORE opening the socket.
+    // WhatsApp's pre-auth connection window is short-lived — if we wait
+    // for user input after the socket is already created, it can close
+    // before requestPairingCode() gets a chance to run.
+    let phoneNumber = null;
+    if (needsPairing) {
+        const hadRealSessionId = SESSION_ID && !SESSION_ID.includes(PLACEHOLDER_SESSION_MARKER);
+
+        if (hadRealSessionId) {
+            console.log(chalk.yellow(`[${BOT_NAME}] SESSION_ID was set but invalid/expired — falling back to pairing code.`));
+        } else {
+            console.log(chalk.cyan(`[${BOT_NAME}] No SESSION_ID configured — pairing required.`));
+        }
+
+        phoneNumber = OWNER_NUMBER;
+        const isPlaceholderNumber = !phoneNumber || phoneNumber.replace(/[^0-9]/g, '') === PLACEHOLDER_NUMBER;
+
+        if (isPlaceholderNumber) {
+            phoneNumber = await ask('Enter the WhatsApp number to link (international format, no + or spaces, e.g. 254712345678): ');
+        } else {
+            console.log(chalk.cyan(`[${BOT_NAME}] Using OWNER_NUMBER from .env: ${phoneNumber}`));
+        }
+
+        phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+    }
+
     const sock = makeWASocket({
         version,
         logger,
@@ -47,36 +76,17 @@ async function start() {
         markOnlineOnConnect: true
     });
 
-    // No SESSION_ID found in .env and not yet linked -> request a pairing code
-    if (needsPairing) {
-        const PLACEHOLDER_NUMBER = '254700000000';
-        const PLACEHOLDER_SESSION_MARKER = 'PASTE_YOUR_SESSION_STRING_HERE';
-        const hadRealSessionId = SESSION_ID && !SESSION_ID.includes(PLACEHOLDER_SESSION_MARKER);
-
-        if (hadRealSessionId) {
-            console.log(chalk.yellow(`[${BOT_NAME}] SESSION_ID was set but invalid/expired — falling back to pairing code.`));
-        } else {
-            console.log(chalk.cyan(`[${BOT_NAME}] No SESSION_ID configured — pairing required.`));
+    // Request the pairing code immediately after the socket is created —
+    // no delay, no waiting on further input.
+    if (needsPairing && phoneNumber) {
+        try {
+            const code = await sock.requestPairingCode(phoneNumber);
+            console.log(chalk.green(`[${BOT_NAME}] Pairing code: `) + chalk.bold.white(code));
+            console.log(chalk.cyan('On your phone: WhatsApp > Linked Devices > Link a Device > Link with phone number instead, then enter this code within 60 seconds.'));
+        } catch (err) {
+            console.error(chalk.red('[Pairing] Failed to generate pairing code:'), err.message);
+            console.log(chalk.yellow('[Pairing] Restart the bot to try again.'));
         }
-
-        let phoneNumber = OWNER_NUMBER;
-        const isPlaceholderNumber = !phoneNumber || phoneNumber.replace(/[^0-9]/g, '') === PLACEHOLDER_NUMBER;
-
-        if (isPlaceholderNumber) {
-            phoneNumber = await ask('Enter the WhatsApp number to link (international format, no + or spaces, e.g. 254712345678): ');
-        } else {
-            console.log(chalk.cyan(`[${BOT_NAME}] Using OWNER_NUMBER from .env: ${phoneNumber}`));
-        }
-
-        setTimeout(async () => {
-            try {
-                const code = await sock.requestPairingCode(phoneNumber.replace(/[^0-9]/g, ''));
-                console.log(chalk.green(`[${BOT_NAME}] Pairing code: `) + chalk.bold.white(code));
-                console.log(chalk.cyan('On your phone: WhatsApp > Linked Devices > Link a Device > Link with phone number instead, then enter this code.'));
-            } catch (err) {
-                console.error(chalk.red('[Pairing] Failed to generate pairing code:'), err.message);
-            }
-        }, 3000);
     }
 
     sock.ev.on('creds.update', saveCreds);
