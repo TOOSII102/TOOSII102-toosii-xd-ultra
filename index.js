@@ -8,12 +8,18 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const chalk = require('chalk');
+const readline = require('readline');
 
-const { PREFIX, BOT_NAME } = require('./config');
+const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
 const logger = pino({ level: 'silent' });
+
+function ask(question) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    return new Promise(resolve => rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); }));
+}
 
 async function start() {
     // Try to hydrate ./session from SESSION_ID before Baileys reads it
@@ -24,6 +30,10 @@ async function start() {
 
     const commands = loadCommands();
 
+    // If we already have a session (from .env SESSION_ID or a prior pairing),
+    // state.creds.registered will be true and we skip pairing entirely.
+    const needsPairing = !state.creds.registered;
+
     const sock = makeWASocket({
         version,
         logger,
@@ -32,67 +42,25 @@ async function start() {
             keys: makeCacheableSignalKeyStore(state.keys, logger)
         },
         browser: Browsers.ubuntu('Chrome'),
-        printQRInTerminal: !state.creds.registered,
+        printQRInTerminal: false, // panel consoles usually can't render QR well — use pairing code instead
         syncFullHistory: false,
         markOnlineOnConnect: true
     });
 
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
-
-        if (connection === 'open') {
-            console.log(chalk.green(`[${BOT_NAME}] Connected ✅`));
+    // No SESSION_ID found in .env and not yet linked -> request a pairing code
+    if (needsPairing) {
+        if (SESSION_ID) {
+            console.log(chalk.yellow(`[${BOT_NAME}] SESSION_ID was set but invalid/expired — falling back to pairing code.`));
+        } else {
+            console.log(chalk.cyan(`[${BOT_NAME}] No SESSION_ID found in .env — pairing required.`));
         }
 
-        if (connection === 'close') {
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log(chalk.red(`[${BOT_NAME}] Connection closed. Reconnect: ${shouldReconnect}`));
-            if (shouldReconnect) start();
+        let phoneNumber = OWNER_NUMBER;
+        if (!phoneNumber) {
+            phoneNumber = await ask('Enter WhatsApp number to link (international format, no + or spaces, e.g. 254700000000): ');
         }
-    });
 
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
-
-        for (const msg of messages) {
-            if (!msg.message || msg.key.fromMe) continue;
-
-            const body =
-                msg.message.conversation ||
-                msg.message.extendedTextMessage?.text ||
-                msg.message.imageMessage?.caption ||
-                msg.message.videoMessage?.caption ||
-                '';
-
-            if (!body.startsWith(PREFIX)) continue;
-
-            const args = body.slice(PREFIX.length).trim().split(/\s+/);
-            const cmdName = args.shift().toLowerCase();
-            const command = commands.get(cmdName);
-
-            if (!command) continue;
-
-            const ctx = {
-                from: msg.key.remoteJid,
-                sender: msg.key.participant || msg.key.remoteJid,
-                isGroup: msg.key.remoteJid.endsWith('@g.us'),
-                prefix: PREFIX
-            };
-
+        setTimeout(async () => {
             try {
-                await command.execute(sock, msg, args, ctx);
-            } catch (err) {
-                console.error(chalk.red(`[Commands] Error running "${cmdName}":`), err);
-                await sock.sendMessage(ctx.from, { text: `⚠️ Error running .${cmdName}: ${err.message}` }, { quoted: msg });
-            }
-        }
-    });
-}
-
-start().catch(err => {
-    console.error(chalk.red('[Fatal]'), err);
-    process.exit(1);
-});
+                const code = await sock.requestPairingCode(phoneNumber.replace(/[^0-9]/g, ''));
+                console.log(chalk.green(`[${BOT_NAME}] Pairing code: `) +
