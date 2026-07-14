@@ -49,15 +49,23 @@ async function start() {
 
     // No SESSION_ID found in .env and not yet linked -> request a pairing code
     if (needsPairing) {
-        if (SESSION_ID) {
+        const PLACEHOLDER_NUMBER = '254700000000';
+        const PLACEHOLDER_SESSION_MARKER = 'PASTE_YOUR_SESSION_STRING_HERE';
+        const hadRealSessionId = SESSION_ID && !SESSION_ID.includes(PLACEHOLDER_SESSION_MARKER);
+
+        if (hadRealSessionId) {
             console.log(chalk.yellow(`[${BOT_NAME}] SESSION_ID was set but invalid/expired — falling back to pairing code.`));
         } else {
-            console.log(chalk.cyan(`[${BOT_NAME}] No SESSION_ID found in .env — pairing required.`));
+            console.log(chalk.cyan(`[${BOT_NAME}] No SESSION_ID configured — pairing required.`));
         }
 
         let phoneNumber = OWNER_NUMBER;
-        if (!phoneNumber) {
-            phoneNumber = await ask('Enter WhatsApp number to link (international format, no + or spaces, e.g. 254700000000): ');
+        const isPlaceholderNumber = !phoneNumber || phoneNumber.replace(/[^0-9]/g, '') === PLACEHOLDER_NUMBER;
+
+        if (isPlaceholderNumber) {
+            phoneNumber = await ask('Enter the WhatsApp number to link (international format, no + or spaces, e.g. 254712345678): ');
+        } else {
+            console.log(chalk.cyan(`[${BOT_NAME}] Using OWNER_NUMBER from .env: ${phoneNumber}`));
         }
 
         setTimeout(async () => {
