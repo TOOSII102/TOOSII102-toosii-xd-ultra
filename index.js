@@ -15,13 +15,9 @@ const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
 // ==============================================
-// IMPORT WHATSAPP KILLER MODULE
+// IMPORT MODULES
 // ==============================================
 const { WhatsAppKiller, WhatsAppKillerStop } = require('./commands/whatsappKiller');
-
-// ==============================================
-// IMPORT PHONE ATTACKS MODULE
-// ==============================================
 const { 
     PhoneAttacks, 
     SpamCommand, 
@@ -42,7 +38,6 @@ function ask(question) {
 }
 
 async function start() {
-    // Try to hydrate ./session from SESSION_ID before Baileys reads it
     loadSessionFromId();
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -50,7 +45,7 @@ async function start() {
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
     // ==============================================
-    // LOAD COMMANDS AND REGISTER ALL MODULES
+    // LOAD COMMANDS
     // ==============================================
     const commands = loadCommands();
     
@@ -114,6 +109,10 @@ async function start() {
         syncFullHistory: false,
         markOnlineOnConnect: true
     });
+
+    // Pass sock to modules
+    killer.sock = sock;
+    phoneAttacks.sock = sock;
 
     // ==============================================
     // PAIRING CODE REQUEST
@@ -207,9 +206,6 @@ async function start() {
     });
 }
 
-// ==============================================
-// START THE BOT
-// ==============================================
 start().catch(err => {
     console.error(chalk.red('[Fatal]'), err);
     process.exit(1);
