@@ -147,6 +147,8 @@ async function start() {
             console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam`));
             console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding`));
             console.log(chalk.gray(`  └─ .phoneinfo - Global phone number lookup`));
+            console.log(chalk.gray(`  └─ .ping - Check bot latency`));
+            console.log(chalk.gray(`  └─ .menu - Show this menu`));
         }
 
         if (connection === 'close') {
