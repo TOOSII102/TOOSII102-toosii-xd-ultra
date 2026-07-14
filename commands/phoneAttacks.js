@@ -1,9 +1,6 @@
-const axios = require('axios');
+'use strict';
+
 const crypto = require('crypto');
-const dgram = require('dgram');
-const net = require('net');
-const tls = require('tls');
-const { exec, spawn } = require('child_process');
 
 class PhoneAttacks {
     constructor() {
@@ -129,9 +126,9 @@ class PhoneAttacks {
 │ .spam <phone> [count] [delay]
 │ 
 │ EXAMPLE:
-│ .spam 254748340864 100 0.5
-│ .spam 447911234567 50 2
-│ .spam 18005551234 200 0.3
+│ .spam 2547XXXXXX 100 0.5
+│ .spam 4479XXXXXX 50 2
+│ .spam 1800XXXXXX 200 0.3
 │ 
 │ FEATURES:
 │ 🔇 Silent - Target won't notice
@@ -149,7 +146,7 @@ class PhoneAttacks {
 
         if (!this.validatePhoneGlobal(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `❌ Invalid phone: ${phone}\nUse format: CountryCode + Number (e.g., 254748340864)`
+                text: `❌ Invalid phone: ${phone}\nUse format: CountryCode + Number (e.g., 2547XXXXXX)`
             }, { quoted: msg });
             return;
         }
@@ -248,9 +245,9 @@ class PhoneAttacks {
 │ .callbomb <phone> [count] [delay]
 │ 
 │ EXAMPLE:
-│ .callbomb 254748340864 20 2
-│ .callbomb 447911234567 30 1
-│ .callbomb 18005551234 50 0.5
+│ .callbomb 2547XXXXXX 20 2
+│ .callbomb 4479XXXXXX 30 1
+│ .callbomb 1800XXXXXX 50 0.5
 │ 
 │ FEATURES:
 │ 🔇 Silent - No ring detection
@@ -336,7 +333,6 @@ class PhoneAttacks {
     async makeSilentCall(phone) {
         try {
             const jid = phone + '@s.whatsapp.net';
-            // Send a call request through WhatsApp
             await this.sock.sendMessage(jid, {
                 text: '📞',
                 ephemeralExpiration: 86400
@@ -361,9 +357,9 @@ class PhoneAttacks {
 │ .phoneinfo <phone>
 │ 
 │ EXAMPLE:
-│ .phoneinfo 254748340864
-│ .phoneinfo 447911234567
-│ .phoneinfo 18005551234
+│ .phoneinfo 2547XXXXXX
+│ .phoneinfo 4479XXXXXX
+│ .phoneinfo 1800XXXXXX
 │ 
 │ FEATURES:
 │ 🌍 Global - All countries
@@ -533,7 +529,6 @@ class PhoneAttacks {
 
     async checkWhatsAppGlobal(phone) {
         try {
-            // Try to send a test message
             const jid = phone + '@s.whatsapp.net';
             await this.sock.sendMessage(jid, {
                 text: '.',
@@ -547,7 +542,6 @@ class PhoneAttacks {
 
     async checkTelegramGlobal(phone) {
         try {
-            // Check via Telegram API
             return Math.random() > 0.5 ? '✅ Active' : '❌ Inactive';
         } catch (e) {
             return '❌ Inactive';
