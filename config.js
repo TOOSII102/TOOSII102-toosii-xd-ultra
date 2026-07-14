@@ -16,4 +16,7 @@ module.exports = {
 
     // Must match the SESSION_PREFIX used by whichever session generator produced SESSION_ID
     SESSION_PREFIX: process.env.SESSION_PREFIX || 'TOOSII-XD:',
+
+    // Session directory
+    SESSION_DIR: './session'
 };
