@@ -2,10 +2,21 @@
 
 const { OWNER_NUMBER } = require('../config');
 
+// Add your actual LID here
+const OWNER_LID = '268286071726080'; // Your LID from the debug log
+
 function isOwner(sender) {
-    const senderNumber = sender.split('@')[0].replace(/[^0-9]/g, '');
+    // Extract number from sender
+    let senderNumber = sender.split('@')[0].replace(/[^0-9]/g, '');
     const ownerNumber = OWNER_NUMBER.replace(/[^0-9]/g, '');
-    return senderNumber === ownerNumber;
+    
+    // Check by LID or by number
+    const isMatch = senderNumber === ownerNumber || 
+                    senderNumber === OWNER_LID ||
+                    sender.includes(OWNER_LID) ||
+                    senderNumber.endsWith(ownerNumber);
+    
+    return isMatch;
 }
 
 function ownerOnly(executeFn) {
