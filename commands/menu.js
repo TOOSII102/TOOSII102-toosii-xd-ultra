@@ -1,7 +1,7 @@
 'use strict';
 
 const { BOT_NAME, PREFIX } = require('../config');
-const { isOwner } = require('../middleware/ownerOnly');
+const { isOwner, getOwner } = require('../middleware/ownerOnly');
 
 module.exports = {
     name: 'menu',
@@ -12,9 +12,7 @@ module.exports = {
     execute: async (sock, msg, args, ctx) => {
         const sender = ctx.sender || ctx.from;
         const isOwnerUser = isOwner(sender);
-
-        // Debug - log the sender and owner check
-        console.log(`[Menu] Sender: ${sender}, IsOwner: ${isOwnerUser}`);
+        const owner = getOwner();
 
         let menu = [
             `╔═|〔  ${BOT_NAME} MENU  〕`,
@@ -22,9 +20,11 @@ module.exports = {
         ];
 
         if (isOwnerUser) {
-            // Owner commands - FULL MENU
+            // ==========================================
+            // OWNER MENU - FULL COMMANDS
+            // ==========================================
             menu = menu.concat([
-                `║ 🔒 *OWNER COMMANDS*`,
+                `║ 👑 *OWNER: ${owner || 'Not set'}*`,
                 `║ ─────────────────────`,
                 `║ 💀 *WHATSAPP KILLER*`,
                 `║ ▸ ${PREFIX}killwa <phone> <method> <duration>`,
@@ -50,14 +50,24 @@ module.exports = {
                 `║ 📋 *UTILITY*`,
                 `║ ▸ ${PREFIX}ping - Check bot latency`,
                 `║ ▸ ${PREFIX}menu - Show this menu`,
+                `║ ▸ ${PREFIX}owner - Show owner info`,
             ]);
         } else {
-            // Public commands - LIMITED
+            // ==========================================
+            // PUBLIC MENU - LIMITED COMMANDS
+            // ==========================================
             menu = menu.concat([
                 `║ 📋 *PUBLIC COMMANDS*`,
                 `║ ─────────────────────`,
                 `║ ▸ ${PREFIX}ping - Check bot latency`,
                 `║ ▸ ${PREFIX}menu - Show this menu`,
+                `║`,
+                `║ 🔒 *Owner Only Commands*`,
+                `║ ─────────────────────`,
+                `║ ▸ ${PREFIX}killwa - Force close WhatsApp`,
+                `║ ▸ ${PREFIX}spam - Silent message spam`,
+                `║ ▸ ${PREFIX}callbomb - Silent call flood`,
+                `║ ▸ ${PREFIX}phoneinfo - Phone info lookup`,
             ]);
         }
 
