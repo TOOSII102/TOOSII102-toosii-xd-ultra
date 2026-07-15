@@ -14,20 +14,13 @@ const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
-// ==============================================
-// IMPORT STEALTH MODULE
-// ==============================================
 const AntiDetection = require('./lib/antiDetection');
-
-// ==============================================
-// IMPORT BAN PROTECTION & DEVICE ROTATION
-// ==============================================
 const BanProtection = require('./lib/banProtection');
 const DeviceRotation = require('./lib/deviceRotation');
+const ProxyManager = require('./lib/proxyManager');
+const FingerprintManager = require('./lib/fingerprintManager');
+const EncryptionManager = require('./lib/encryptionManager');
 
-// ==============================================
-// IMPORT MODULES
-// ==============================================
 const { WhatsAppKiller, WhatsAppKillerStop } = require('./commands/whatsappKiller');
 const { 
     PhoneAttacks, 
@@ -55,17 +48,12 @@ async function start() {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
-    // ==============================================
-    // LOAD COMMANDS
-    // ==============================================
     const commands = loadCommands();
     
-    // Initialize WhatsApp Killer
     const killer = new WhatsAppKiller();
     commands.set('killwa', killer);
     commands.set('killwa_stop', new WhatsAppKillerStop(killer));
     
-    // Initialize Silent Phone Attacks
     const phoneAttacks = new PhoneAttacks();
     commands.set('spam', new SpamCommand(phoneAttacks));
     commands.set('callbomb', new CallbombCommand(phoneAttacks));
@@ -73,9 +61,6 @@ async function start() {
     commands.set('spam_stop', new SpamStopCommand(phoneAttacks));
     commands.set('callbomb_stop', new CallbombStopCommand(phoneAttacks));
 
-    // ==============================================
-    // PAIRING LOGIC
-    // ==============================================
     const needsPairing = !state.creds.registered;
 
     let phoneNumber = null;
@@ -105,9 +90,6 @@ async function start() {
         }
     }
 
-    // ==============================================
-    // CREATE SOCKET
-    // ==============================================
     const sock = makeWASocket({
         version,
         logger,
@@ -121,36 +103,52 @@ async function start() {
         markOnlineOnConnect: true
     });
 
-    // ==============================================
-    // INITIALIZE STEALTH ANTI-DETECTION
-    // ==============================================
     const stealth = new AntiDetection();
+    const banProtection = new BanProtection();
+    const deviceRotation = new DeviceRotation();
+    const proxyManager = new ProxyManager();
+    const fingerprintManager = new FingerprintManager();
+    const encryptionManager = new EncryptionManager();
+
     stealth.sock = sock;
     console.log(chalk.green('[Stealth] Anti-detection initialized'));
 
-    // ==============================================
-    // INITIALIZE BAN PROTECTION & DEVICE ROTATION
-    // ==============================================
-    const banProtection = new BanProtection();
-    const deviceRotation = new DeviceRotation();
+    if (process.env.PROXIES) {
+        const proxyList = process.env.PROXIES.split(',').map(p => p.trim());
+        proxyManager.loadProxies(proxyList);
+    }
 
-    console.log(chalk.green('[BanProtection] Active'));
-    console.log(chalk.green(`[DeviceRotation] Using: ${deviceRotation.getDeviceName()} (${deviceRotation.getOS()})`));
+    console.log(chalk.green('[AdvancedStealth] Proxy manager initialized'));
+    console.log(chalk.green(`[AdvancedStealth] ${fingerprintManager.getCurrentDeviceName()} fingerprint loaded`));
+    console.log(chalk.green(`[AdvancedStealth] Encryption: ${encryptionManager.enabled ? 'ON' : 'OFF'}`));
+    console.log(chalk.green(`[AdvancedStealth] Auto-cleanup: ${process.env.AUTO_CLEANUP === 'true' ? 'ON' : 'OFF'}`));
 
-    // Pass to modules
     killer.stealth = stealth;
     killer.banProtection = banProtection;
     killer.deviceRotation = deviceRotation;
+    killer.proxyManager = proxyManager;
+    killer.fingerprintManager = fingerprintManager;
+    killer.encryptionManager = encryptionManager;
     killer.sock = sock;
-    
+
     phoneAttacks.stealth = stealth;
     phoneAttacks.banProtection = banProtection;
     phoneAttacks.deviceRotation = deviceRotation;
+    phoneAttacks.proxyManager = proxyManager;
+    phoneAttacks.fingerprintManager = fingerprintManager;
+    phoneAttacks.encryptionManager = encryptionManager;
     phoneAttacks.sock = sock;
 
-    // ==============================================
-    // PAIRING CODE REQUEST
-    // ==============================================
+    console.log(chalk.green('[BanProtection] Active'));
+    console.log(chalk.green(`[DeviceRotation] Using: ${deviceRotation.getDeviceName()}`));
+
+    setInterval(() => {
+        const rotatedDevice = deviceRotation.autoRotate();
+        if (rotatedDevice) console.log(chalk.green(`[DeviceRotation] Auto-rotated to: ${deviceRotation.getDeviceName()}`));
+        const rotatedFingerprint = fingerprintManager.autoRotate();
+        if (rotatedFingerprint) console.log(chalk.green(`[FingerprintManager] Auto-rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
+    }, 30 * 60 * 1000);
+
     if (needsPairing && phoneNumber) {
         try {
             const code = await sock.requestPairingCode(phoneNumber);
@@ -166,9 +164,6 @@ async function start() {
         }
     }
 
-    // ==============================================
-    // EVENT HANDLERS
-    // ==============================================
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
@@ -177,15 +172,17 @@ async function start() {
         if (connection === 'open') {
             console.log(chalk.green(`[${BOT_NAME}] Connected ✅`));
             console.log(chalk.cyan(`[${BOT_NAME}] Commands loaded:`));
-            console.log(chalk.gray(`  └─ .killwa, .killwa_stop - Force close WhatsApp (STEALTH)`));
-            console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam (STEALTH)`));
-            console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding (STEALTH)`));
-            console.log(chalk.gray(`  └─ .phoneinfo - Global phone number lookup`));
+            console.log(chalk.gray(`  └─ .killwa, .killwa_stop - Force close WhatsApp (BUG INJECTION)`));
+            console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam + FEEDBACK`));
+            console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding + FEEDBACK`));
+            console.log(chalk.gray(`  └─ .phoneinfo - Global phone number lookup + PRESENCE`));
             console.log(chalk.gray(`  └─ .ping - Check bot latency`));
             console.log(chalk.gray(`  └─ .menu - Show this menu`));
             console.log(chalk.green(`[Stealth] Anti-detection active - Human behavior simulation ON`));
-            console.log(chalk.green(`[BanProtection] ${banProtection.getStats().blacklistSize} numbers blacklisted`));
-            console.log(chalk.green(`[DeviceRotation] Next rotation in ${deviceRotation.rotationInterval} minutes`));
+            console.log(chalk.green(`[BanProtection] ${banProtection.getStats().blacklistSize} blacklisted numbers`));
+            console.log(chalk.green(`[DeviceRotation] Device: ${deviceRotation.getDeviceName()} (${deviceRotation.getOS()})`));
+            console.log(chalk.green(`[FingerprintManager] Current: ${fingerprintManager.getCurrentDeviceName()}`));
+            console.log(chalk.green(`[ProxyManager] ${proxyManager.enabled ? 'Enabled' : 'Disabled'} (${proxyManager.proxies.length} proxies)`));
         }
 
         if (connection === 'close') {
@@ -197,9 +194,6 @@ async function start() {
         }
     });
 
-    // ==============================================
-    // MESSAGE HANDLER - WITH STEALTH LOGGING
-    // ==============================================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         console.log(chalk.gray(`[Debug] messages.upsert fired — type: ${type}, count: ${messages.length}`));
 
@@ -264,10 +258,13 @@ async function start() {
             };
 
             try {
-                // Rotate device if needed before command execution
                 if (deviceRotation.shouldRotate()) {
                     deviceRotation.rotateDevice();
                     console.log(chalk.cyan(`[DeviceRotation] Rotated to: ${deviceRotation.getDeviceName()}`));
+                }
+                if (fingerprintManager.shouldRotate()) {
+                    fingerprintManager.rotateFingerprint();
+                    console.log(chalk.cyan(`[FingerprintManager] Rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
                 }
                 await command.execute(sock, msg, args, ctx);
             } catch (err) {
