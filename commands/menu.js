@@ -13,18 +13,17 @@ module.exports = {
         const sender = ctx.sender || ctx.from;
         const isOwnerUser = isOwner(sender);
 
+        // Debug - log the sender and owner check
+        console.log(`[Menu] Sender: ${sender}, IsOwner: ${isOwnerUser}`);
+
         let menu = [
             `╔═|〔  ${BOT_NAME} MENU  〕`,
             `║`,
-            `║ 📋 *PUBLIC COMMANDS*`,
-            `║ ─────────────────────`,
-            `║ ▸ ${PREFIX}ping - Check bot latency`,
-            `║ ▸ ${PREFIX}menu - Show this menu`,
         ];
 
         if (isOwnerUser) {
+            // Owner commands - FULL MENU
             menu = menu.concat([
-                `║`,
                 `║ 🔒 *OWNER COMMANDS*`,
                 `║ ─────────────────────`,
                 `║ 💀 *WHATSAPP KILLER*`,
@@ -47,6 +46,18 @@ module.exports = {
                 `║ 🔍 *PHONE INFO*`,
                 `║ ▸ ${PREFIX}phoneinfo <phone>`,
                 `║   Example: ${PREFIX}phoneinfo 2547XXXXXX`,
+                `║`,
+                `║ 📋 *UTILITY*`,
+                `║ ▸ ${PREFIX}ping - Check bot latency`,
+                `║ ▸ ${PREFIX}menu - Show this menu`,
+            ]);
+        } else {
+            // Public commands - LIMITED
+            menu = menu.concat([
+                `║ 📋 *PUBLIC COMMANDS*`,
+                `║ ─────────────────────`,
+                `║ ▸ ${PREFIX}ping - Check bot latency`,
+                `║ ▸ ${PREFIX}menu - Show this menu`,
             ]);
         }
 
