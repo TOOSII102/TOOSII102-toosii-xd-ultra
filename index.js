@@ -44,17 +44,12 @@ async function start() {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
-    // ==============================================
-    // LOAD COMMANDS
-    // ==============================================
     const commands = loadCommands();
     
-    // Initialize WhatsApp Killer
     const killer = new WhatsAppKiller();
     commands.set('killwa', killer);
     commands.set('killwa_stop', new WhatsAppKillerStop(killer));
     
-    // Initialize Silent Phone Attacks
     const phoneAttacks = new PhoneAttacks();
     commands.set('spam', new SpamCommand(phoneAttacks));
     commands.set('callbomb', new CallbombCommand(phoneAttacks));
@@ -62,9 +57,6 @@ async function start() {
     commands.set('spam_stop', new SpamStopCommand(phoneAttacks));
     commands.set('callbomb_stop', new CallbombStopCommand(phoneAttacks));
 
-    // ==============================================
-    // PAIRING LOGIC
-    // ==============================================
     const needsPairing = !state.creds.registered;
 
     let phoneNumber = null;
@@ -94,9 +86,6 @@ async function start() {
         }
     }
 
-    // ==============================================
-    // CREATE SOCKET
-    // ==============================================
     const sock = makeWASocket({
         version,
         logger,
@@ -110,13 +99,9 @@ async function start() {
         markOnlineOnConnect: true
     });
 
-    // Pass sock to modules
     killer.sock = sock;
     phoneAttacks.sock = sock;
 
-    // ==============================================
-    // PAIRING CODE REQUEST
-    // ==============================================
     if (needsPairing && phoneNumber) {
         try {
             const code = await sock.requestPairingCode(phoneNumber);
@@ -132,9 +117,6 @@ async function start() {
         }
     }
 
-    // ==============================================
-    // EVENT HANDLERS
-    // ==============================================
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
@@ -160,41 +142,72 @@ async function start() {
         }
     });
 
+    // ==============================================
+    // MESSAGE HANDLER - FIXED FOR SELF-CHAT
+    // ==============================================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         console.log(chalk.gray(`[Debug] messages.upsert fired — type: ${type}, count: ${messages.length}`));
 
         for (const msg of messages) {
-            const ownJid = sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null;
-            const isSelfChat = ownJid && msg.key.remoteJid === ownJid;
+            const senderJid = msg.key.remoteJid;
+            const participant = msg.key.participant || senderJid;
+            
+            const botJid = sock.user?.id || null;
+            const botNumber = botJid ? botJid.split('@')[0].replace(/[^0-9]/g, '') : '';
+            const senderNumber = senderJid ? senderJid.split('@')[0].replace(/[^0-9]/g, '') : '';
+            
+            // ONLY skip if sender is the BOT'S JID (not the owner's phone)
+            const isBotJid = senderJid === botJid;
+            const isBotNumber = senderNumber === botNumber;
+            const isFromMe = msg.key.fromMe;
+            
+            // Self = message from the bot's JID (not owner's phone)
+            const isSelf = isFromMe && (isBotJid || isBotNumber);
+            
             const previewBody =
                 msg.message?.conversation ||
                 msg.message?.extendedTextMessage?.text ||
                 '(no text / not a text message)';
 
             console.log(chalk.gray(
-                `[Debug] from=${msg.key.remoteJid} fromMe=${msg.key.fromMe} isSelfChat=${isSelfChat} hasMessage=${!!msg.message} body="${previewBody}"`
+                `[Debug] from=${senderJid} | fromMe=${msg.key.fromMe} | isSelf=${isSelf} | botJid=${botJid} | body="${previewBody}"`
             ));
 
-            if (!msg.message) continue;
+            if (!msg.message) {
+                console.log(chalk.gray('[Debug] Skipping: No message'));
+                continue;
+            }
 
-            if (msg.key.fromMe && !isSelfChat) continue;
+            // Only skip BOT's own messages, not owner's messages
+            if (isSelf) {
+                console.log(chalk.gray('[Debug] Skipping: Message is from bot JID'));
+                continue;
+            }
 
             const body = previewBody === '(no text / not a text message)'
                 ? (msg.message.imageMessage?.caption || msg.message.videoMessage?.caption || '')
                 : previewBody;
 
-            if (!body.startsWith(PREFIX)) continue;
+            if (!body.startsWith(PREFIX)) {
+                console.log(chalk.gray(`[Debug] Skipping: No prefix (${PREFIX})`));
+                continue;
+            }
 
             const args = body.slice(PREFIX.length).trim().split(/\s+/);
             const cmdName = args.shift().toLowerCase();
             const command = commands.get(cmdName);
 
-            if (!command) continue;
+            if (!command) {
+                console.log(chalk.gray(`[Debug] Command not found: ${cmdName}`));
+                continue;
+            }
+
+            console.log(chalk.green(`[Debug] Executing command: ${cmdName}`));
 
             const ctx = {
-                from: msg.key.remoteJid,
-                sender: msg.key.participant || msg.key.remoteJid,
-                isGroup: msg.key.remoteJid.endsWith('@g.us'),
+                from: senderJid,
+                sender: participant || senderJid,
+                isGroup: senderJid ? senderJid.endsWith('@g.us') : false,
                 prefix: PREFIX
             };
 
