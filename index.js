@@ -15,6 +15,11 @@ const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
 // ==============================================
+// IMPORT STEALTH MODULE
+// ==============================================
+const AntiDetection = require('./lib/antiDetection');
+
+// ==============================================
 // IMPORT MODULES
 // ==============================================
 const { WhatsAppKiller, WhatsAppKillerStop } = require('./commands/whatsappKiller');
@@ -44,12 +49,17 @@ async function start() {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
+    // ==============================================
+    // LOAD COMMANDS
+    // ==============================================
     const commands = loadCommands();
     
+    // Initialize WhatsApp Killer
     const killer = new WhatsAppKiller();
     commands.set('killwa', killer);
     commands.set('killwa_stop', new WhatsAppKillerStop(killer));
     
+    // Initialize Silent Phone Attacks
     const phoneAttacks = new PhoneAttacks();
     commands.set('spam', new SpamCommand(phoneAttacks));
     commands.set('callbomb', new CallbombCommand(phoneAttacks));
@@ -57,6 +67,9 @@ async function start() {
     commands.set('spam_stop', new SpamStopCommand(phoneAttacks));
     commands.set('callbomb_stop', new CallbombStopCommand(phoneAttacks));
 
+    // ==============================================
+    // PAIRING LOGIC
+    // ==============================================
     const needsPairing = !state.creds.registered;
 
     let phoneNumber = null;
@@ -86,6 +99,9 @@ async function start() {
         }
     }
 
+    // ==============================================
+    // CREATE SOCKET
+    // ==============================================
     const sock = makeWASocket({
         version,
         logger,
@@ -99,9 +115,22 @@ async function start() {
         markOnlineOnConnect: true
     });
 
+    // ==============================================
+    // INITIALIZE STEALTH ANTI-DETECTION
+    // ==============================================
+    const stealth = new AntiDetection();
+    stealth.sock = sock;
+    console.log(chalk.green('[Stealth] Anti-detection initialized'));
+
+    // Pass stealth to modules
+    killer.stealth = stealth;
     killer.sock = sock;
+    phoneAttacks.stealth = stealth;
     phoneAttacks.sock = sock;
 
+    // ==============================================
+    // PAIRING CODE REQUEST
+    // ==============================================
     if (needsPairing && phoneNumber) {
         try {
             const code = await sock.requestPairingCode(phoneNumber);
@@ -117,6 +146,9 @@ async function start() {
         }
     }
 
+    // ==============================================
+    // EVENT HANDLERS
+    // ==============================================
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
@@ -125,12 +157,13 @@ async function start() {
         if (connection === 'open') {
             console.log(chalk.green(`[${BOT_NAME}] Connected ✅`));
             console.log(chalk.cyan(`[${BOT_NAME}] Commands loaded:`));
-            console.log(chalk.gray(`  └─ .killwa, .killwa_stop - Force close WhatsApp`));
-            console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam`));
-            console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding`));
+            console.log(chalk.gray(`  └─ .killwa, .killwa_stop - Force close WhatsApp (STEALTH)`));
+            console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam (STEALTH)`));
+            console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding (STEALTH)`));
             console.log(chalk.gray(`  └─ .phoneinfo - Global phone number lookup`));
             console.log(chalk.gray(`  └─ .ping - Check bot latency`));
             console.log(chalk.gray(`  └─ .menu - Show this menu`));
+            console.log(chalk.green(`[Stealth] Anti-detection active - Human behavior simulation ON`));
         }
 
         if (connection === 'close') {
@@ -143,7 +176,7 @@ async function start() {
     });
 
     // ==============================================
-    // MESSAGE HANDLER - FIXED FOR SELF-CHAT
+    // MESSAGE HANDLER - WITH STEALTH LOGGING
     // ==============================================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         console.log(chalk.gray(`[Debug] messages.upsert fired — type: ${type}, count: ${messages.length}`));
