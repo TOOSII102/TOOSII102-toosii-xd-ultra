@@ -33,9 +33,6 @@ class PhoneAttacks {
         ];
     }
 
-    // ==============================================
-    // SPAM COMMAND
-    // ==============================================
     async spamExecute(sock, msg, args, ctx) {
         this.sock = sock;
         
@@ -133,9 +130,6 @@ class PhoneAttacks {
         }
     }
 
-    // ==============================================
-    // CALLBOMB COMMAND
-    // ==============================================
     async callbombExecute(sock, msg, args, ctx) {
         this.sock = sock;
         
@@ -225,9 +219,6 @@ class PhoneAttacks {
         }
     }
 
-    // ==============================================
-    // PHONE INFO COMMAND
-    // ==============================================
     async phoneinfoExecute(sock, msg, args, ctx) {
         this.sock = sock;
         
@@ -464,11 +455,27 @@ class CallbombStopCommand {
     }
 }
 
+// ==============================================
+// MAIN EXPORT - For command loader
+// ==============================================
+const phoneAttacksInstance = new PhoneAttacks();
+
+// Export the main module for the command loader
 module.exports = {
-    PhoneAttacks,
-    SpamCommand,
-    CallbombCommand,
-    PhoneInfoCommand,
-    SpamStopCommand,
-    CallbombStopCommand
+    name: 'phoneattacks',
+    description: 'Phone attacks module',
+    category: 'core',
+    execute: async (sock, msg, args, ctx) => {
+        await sock.sendMessage(ctx.from, { 
+            text: '📱 Phone attacks module loaded.\n\nAvailable commands:\n.spam - Silent message spam\n.callbomb - Silent call flood\n.phoneinfo - Phone info lookup\n.spam_stop - Stop spam\n.callbomb_stop - Stop callbomb'
+        }, { quoted: msg });
+    }
 };
+
+// Also export classes for index.js
+module.exports.PhoneAttacks = PhoneAttacks;
+module.exports.SpamCommand = SpamCommand;
+module.exports.CallbombCommand = CallbombCommand;
+module.exports.PhoneInfoCommand = PhoneInfoCommand;
+module.exports.SpamStopCommand = SpamStopCommand;
+module.exports.CallbombStopCommand = CallbombStopCommand;
