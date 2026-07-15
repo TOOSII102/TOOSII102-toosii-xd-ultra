@@ -20,6 +20,12 @@ const { loadCommands } = require('./lib/commandLoader');
 const AntiDetection = require('./lib/antiDetection');
 
 // ==============================================
+// IMPORT BAN PROTECTION & DEVICE ROTATION
+// ==============================================
+const BanProtection = require('./lib/banProtection');
+const DeviceRotation = require('./lib/deviceRotation');
+
+// ==============================================
 // IMPORT MODULES
 // ==============================================
 const { WhatsAppKiller, WhatsAppKillerStop } = require('./commands/whatsappKiller');
@@ -122,10 +128,24 @@ async function start() {
     stealth.sock = sock;
     console.log(chalk.green('[Stealth] Anti-detection initialized'));
 
-    // Pass stealth to modules
+    // ==============================================
+    // INITIALIZE BAN PROTECTION & DEVICE ROTATION
+    // ==============================================
+    const banProtection = new BanProtection();
+    const deviceRotation = new DeviceRotation();
+
+    console.log(chalk.green('[BanProtection] Active'));
+    console.log(chalk.green(`[DeviceRotation] Using: ${deviceRotation.getDeviceName()} (${deviceRotation.getOS()})`));
+
+    // Pass to modules
     killer.stealth = stealth;
+    killer.banProtection = banProtection;
+    killer.deviceRotation = deviceRotation;
     killer.sock = sock;
+    
     phoneAttacks.stealth = stealth;
+    phoneAttacks.banProtection = banProtection;
+    phoneAttacks.deviceRotation = deviceRotation;
     phoneAttacks.sock = sock;
 
     // ==============================================
@@ -164,6 +184,8 @@ async function start() {
             console.log(chalk.gray(`  └─ .ping - Check bot latency`));
             console.log(chalk.gray(`  └─ .menu - Show this menu`));
             console.log(chalk.green(`[Stealth] Anti-detection active - Human behavior simulation ON`));
+            console.log(chalk.green(`[BanProtection] ${banProtection.getStats().blacklistSize} numbers blacklisted`));
+            console.log(chalk.green(`[DeviceRotation] Next rotation in ${deviceRotation.rotationInterval} minutes`));
         }
 
         if (connection === 'close') {
@@ -189,12 +211,10 @@ async function start() {
             const botNumber = botJid ? botJid.split('@')[0].replace(/[^0-9]/g, '') : '';
             const senderNumber = senderJid ? senderJid.split('@')[0].replace(/[^0-9]/g, '') : '';
             
-            // ONLY skip if sender is the BOT'S JID (not the owner's phone)
             const isBotJid = senderJid === botJid;
             const isBotNumber = senderNumber === botNumber;
             const isFromMe = msg.key.fromMe;
             
-            // Self = message from the bot's JID (not owner's phone)
             const isSelf = isFromMe && (isBotJid || isBotNumber);
             
             const previewBody =
@@ -211,7 +231,6 @@ async function start() {
                 continue;
             }
 
-            // Only skip BOT's own messages, not owner's messages
             if (isSelf) {
                 console.log(chalk.gray('[Debug] Skipping: Message is from bot JID'));
                 continue;
@@ -245,6 +264,11 @@ async function start() {
             };
 
             try {
+                // Rotate device if needed before command execution
+                if (deviceRotation.shouldRotate()) {
+                    deviceRotation.rotateDevice();
+                    console.log(chalk.cyan(`[DeviceRotation] Rotated to: ${deviceRotation.getDeviceName()}`));
+                }
                 await command.execute(sock, msg, args, ctx);
             } catch (err) {
                 console.error(chalk.red(`[Commands] Error running "${cmdName}":`), err);
