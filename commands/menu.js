@@ -1,7 +1,7 @@
 'use strict';
 
 const { BOT_NAME, PREFIX } = require('../config');
-const { isOwner, getOwner } = require('../middleware/ownerOnly');
+const { isOwner, getOwner, getOwnerIdentifiers } = require('../middleware/ownerOnly');
 
 module.exports = {
     name: 'menu',
@@ -13,6 +13,7 @@ module.exports = {
         const sender = ctx.sender || ctx.from;
         const isOwnerUser = isOwner(sender);
         const owner = getOwner();
+        const ownerIds = getOwnerIdentifiers();
 
         let menu = [
             `╔═|〔  ${BOT_NAME} MENU  〕`,
@@ -20,11 +21,10 @@ module.exports = {
         ];
 
         if (isOwnerUser) {
-            // ==========================================
-            // OWNER MENU - FULL COMMANDS
-            // ==========================================
             menu = menu.concat([
-                `║ 👑 *OWNER: ${owner || 'Not set'}*`,
+                `║ 👑 *OWNER*`,
+                `║ ▸ JID: ${owner || 'Not set'}`,
+                `║ ▸ Phone: ${ownerIds.phone || 'Unknown'}`,
                 `║ ─────────────────────`,
                 `║ 💀 *WHATSAPP KILLER*`,
                 `║ ▸ ${PREFIX}killwa <phone> <method> <duration>`,
@@ -53,9 +53,6 @@ module.exports = {
                 `║ ▸ ${PREFIX}owner - Show owner info`,
             ]);
         } else {
-            // ==========================================
-            // PUBLIC MENU - LIMITED COMMANDS
-            // ==========================================
             menu = menu.concat([
                 `║ 📋 *PUBLIC COMMANDS*`,
                 `║ ─────────────────────`,
