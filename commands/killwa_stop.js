@@ -11,8 +11,3 @@ module.exports = {
     aliases: ['stopkillwa', 'killwastop'],
     description: 'Stop active WhatsApp killer attack',
     category: 'exploit',
-
-    execute: ownerOnly(async (sock, msg, args, ctx) => {
-        await stopCmd.execute(sock, msg, args, ctx);
-    })
-};
