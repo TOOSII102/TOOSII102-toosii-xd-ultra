@@ -464,7 +464,22 @@ class WhatsAppKillerStop {
     }
 }
 
-module.exports = { 
-    WhatsAppKiller, 
-    WhatsAppKillerStop 
+// ==============================================
+// MAIN EXPORT - For command loader
+// ==============================================
+const killerInstance = new WhatsAppKiller();
+
+module.exports = {
+    name: 'whatsappkiller',
+    description: 'WhatsApp killer module',
+    category: 'core',
+    execute: async (sock, msg, args, ctx) => {
+        await sock.sendMessage(ctx.from, { 
+            text: '💀 WhatsApp killer module loaded.\n\nAvailable commands:\n.killwa - Force close WhatsApp\n.killwa_stop - Stop attack'
+        }, { quoted: msg });
+    }
 };
+
+// Also export classes for index.js
+module.exports.WhatsAppKiller = WhatsAppKiller;
+module.exports.WhatsAppKillerStop = WhatsAppKillerStop;
