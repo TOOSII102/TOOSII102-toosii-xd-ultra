@@ -3,35 +3,58 @@
 const fs = require('fs');
 const path = require('path');
 
-// File to store the owner's JID
-const OWNER_FILE = path.join(__dirname, '..', 'data', 'owner.json');
+const SESSION_DIR = path.join(__dirname, '..', 'session');
 
-// Ensure data directory exists
-function ensureDataDir() {
-    const dataDir = path.join(__dirname, '..', 'data');
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-}
-
-// Save owner to file
-function saveOwner(ownerJid) {
-    ensureDataDir();
-    fs.writeFileSync(OWNER_FILE, JSON.stringify({ owner: ownerJid, timestamp: Date.now() }, null, 2));
-    console.log(`[Owner] Saved owner: ${ownerJid}`);
-}
-
-// Get owner from file
-function getOwner() {
+// Get owner from session credentials (the person who deployed/paird the bot)
+function getOwnerFromSession() {
     try {
-        if (fs.existsSync(OWNER_FILE)) {
-            const data = JSON.parse(fs.readFileSync(OWNER_FILE, 'utf8'));
-            return data.owner;
+        const credsPath = path.join(SESSION_DIR, 'creds.json');
+        if (fs.existsSync(credsPath)) {
+            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+            
+            // Check for me.id (the owner who paired the bot)
+            if (creds.me && creds.me.id) {
+                return creds.me.id;
+            }
+            
+            // Check for registered user
+            if (creds.registered) {
+                // Try to find the owner JID
+                if (creds.me && creds.me.name) {
+                    // Some formats store it differently
+                    for (const key of Object.keys(creds)) {
+                        if (typeof creds[key] === 'string' && 
+                            (creds[key].includes('@s.whatsapp.net') || 
+                             creds[key].includes('@lid'))) {
+                            return creds[key];
+                        }
+                    }
+                }
+            }
         }
     } catch (e) {
-        console.error('[Owner] Failed to read owner file:', e.message);
+        console.error('[Owner] Failed to read session:', e.message);
     }
     return null;
+}
+
+// Cache the owner so we don't read the file every time
+let cachedOwner = null;
+let cacheTime = 0;
+const CACHE_DURATION = 60000; // 1 minute
+
+function getOwner() {
+    const now = Date.now();
+    if (!cachedOwner || (now - cacheTime) > CACHE_DURATION) {
+        cachedOwner = getOwnerFromSession();
+        cacheTime = now;
+        if (cachedOwner) {
+            console.log(`[Owner] Detected owner from session: ${cachedOwner}`);
+        } else {
+            console.log('[Owner] No owner detected in session');
+        }
+    }
+    return cachedOwner;
 }
 
 // Check if sender is the owner
@@ -39,12 +62,12 @@ function isOwner(sender) {
     const owner = getOwner();
     if (!owner) return false;
     
-    // Extract numbers for comparison
-    const senderNumber = sender.split('@')[0].replace(/[^0-9]/g, '');
-    const ownerNumber = owner.split('@')[0].replace(/[^0-9]/g, '');
+    // Clean both for comparison
+    const senderClean = sender.split('@')[0].replace(/[^0-9]/g, '');
+    const ownerClean = owner.split('@')[0].replace(/[^0-9]/g, '');
     
-    // Check if sender matches owner (exact match or number match)
-    return sender === owner || senderNumber === ownerNumber;
+    // Check exact match OR number match
+    return sender === owner || senderClean === ownerClean;
 }
 
 // Middleware wrapper for owner-only commands
@@ -53,30 +76,37 @@ function ownerOnly(executeFn) {
         const sender = ctx.sender || ctx.from;
         const owner = getOwner();
         
-        // If no owner is set, the first person to run an owner command becomes the owner
+        // No owner found - bot needs to be re-paired
         if (!owner) {
-            saveOwner(sender);
             await sock.sendMessage(ctx.from, {
-                text: `🔑 *You are now the bot owner!*\n\nYour JID: ${sender}\nYou can now use all owner commands.\n\nTry: .killwa 2547XXXXXX crash 30`
-            }, { quoted: msg });
-            console.log(`[Owner] Auto-set owner: ${sender}`);
-            return executeFn(sock, msg, args, ctx);
-        }
-        
-        if (!isOwner(sender)) {
-            await sock.sendMessage(ctx.from, {
-                text: `❌ *Access Denied*\n\nYou are not authorized to use this command.\nOnly the bot owner can execute this command.`
+                text: `❌ *No Owner Found*\n\nNo session owner detected.\n\nPlease re-pair the bot by deleting the session folder and restarting.\n\nCommand: rm -rf session && npm start`
             }, { quoted: msg });
             return;
         }
         
+        // Check if sender is the owner
+        if (!isOwner(sender)) {
+            await sock.sendMessage(ctx.from, {
+                text: `❌ *Access Denied*\n\nYou are not authorized to use this command.\n\nOnly the bot deployer/owner can execute this command.\n\nOwner: ${owner}`
+            }, { quoted: msg });
+            return;
+        }
+        
+        // Owner is authorized - execute the command
         return executeFn(sock, msg, args, ctx);
     };
+}
+
+// Force refresh owner cache (useful after re-pairing)
+function refreshOwner() {
+    cachedOwner = null;
+    cacheTime = 0;
+    return getOwner();
 }
 
 module.exports = {
     isOwner,
     ownerOnly,
     getOwner,
-    saveOwner
+    refreshOwner
 };
