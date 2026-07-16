@@ -1,7 +1,7 @@
 'use strict';
 
 const { ownerOnly } = require('../middleware/ownerOnly');
-const { WhatsAppKiller, WhatsAppKillerStop } = require('./whatsappKiller');
+const { WhatsAppKiller, WhatsAppKillerStop } = require('../lib/whatsappKiller');
 
 const killer = new WhatsAppKiller();
 const stopCmd = new WhatsAppKillerStop(killer);
