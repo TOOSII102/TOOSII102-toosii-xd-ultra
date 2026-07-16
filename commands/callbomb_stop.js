@@ -1,7 +1,7 @@
 'use strict';
 
 const { ownerOnly } = require('../middleware/ownerOnly');
-const { PhoneAttacks, CallbombStopCommand } = require('./phoneAttacks');
+const { PhoneAttacks, CallbombStopCommand } = require('../lib/phoneAttacks');
 
 const phoneAttacks = new PhoneAttacks();
 const stopCmd = new CallbombStopCommand(phoneAttacks);
