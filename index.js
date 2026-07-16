@@ -14,6 +14,9 @@ const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
+// ==============================================
+// IMPORT PROTECTION MODULES
+// ==============================================
 const AntiDetection = require('./lib/antiDetection');
 const BanProtection = require('./lib/banProtection');
 const DeviceRotation = require('./lib/deviceRotation');
@@ -21,15 +24,18 @@ const ProxyManager = require('./lib/proxyManager');
 const FingerprintManager = require('./lib/fingerprintManager');
 const EncryptionManager = require('./lib/encryptionManager');
 
-const { WhatsAppKiller, WhatsAppKillerStop } = require('./commands/whatsappKiller');
-const { 
-    PhoneAttacks, 
-    SpamCommand, 
-    CallbombCommand, 
+// ==============================================
+// IMPORT CORE MODULES (now from lib)
+// ==============================================
+const { WhatsAppKiller, WhatsAppKillerStop } = require('./lib/whatsappKiller');
+const {
+    PhoneAttacks,
+    SpamCommand,
+    CallbombCommand,
     PhoneInfoCommand,
     SpamStopCommand,
-    CallbombStopCommand 
-} = require('./commands/phoneAttacks');
+    CallbombStopCommand
+} = require('./lib/phoneAttacks');
 
 const logger = pino({ level: 'silent' });
 
@@ -48,12 +54,17 @@ async function start() {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
+    // ==============================================
+    // LOAD COMMANDS
+    // ==============================================
     const commands = loadCommands();
-    
+
+    // Initialize WhatsApp Killer
     const killer = new WhatsAppKiller();
     commands.set('killwa', killer);
     commands.set('killwa_stop', new WhatsAppKillerStop(killer));
-    
+
+    // Initialize Silent Phone Attacks
     const phoneAttacks = new PhoneAttacks();
     commands.set('spam', new SpamCommand(phoneAttacks));
     commands.set('callbomb', new CallbombCommand(phoneAttacks));
@@ -61,6 +72,9 @@ async function start() {
     commands.set('spam_stop', new SpamStopCommand(phoneAttacks));
     commands.set('callbomb_stop', new CallbombStopCommand(phoneAttacks));
 
+    // ==============================================
+    // PAIRING LOGIC
+    // ==============================================
     const needsPairing = !state.creds.registered;
 
     let phoneNumber = null;
@@ -90,6 +104,9 @@ async function start() {
         }
     }
 
+    // ==============================================
+    // CREATE SOCKET
+    // ==============================================
     const sock = makeWASocket({
         version,
         logger,
@@ -103,6 +120,9 @@ async function start() {
         markOnlineOnConnect: true
     });
 
+    // ==============================================
+    // INITIALIZE PROTECTION MODULES
+    // ==============================================
     const stealth = new AntiDetection();
     const banProtection = new BanProtection();
     const deviceRotation = new DeviceRotation();
@@ -123,6 +143,7 @@ async function start() {
     console.log(chalk.green(`[AdvancedStealth] Encryption: ${encryptionManager.enabled ? 'ON' : 'OFF'}`));
     console.log(chalk.green(`[AdvancedStealth] Auto-cleanup: ${process.env.AUTO_CLEANUP === 'true' ? 'ON' : 'OFF'}`));
 
+    // Pass protection instances to modules
     killer.stealth = stealth;
     killer.banProtection = banProtection;
     killer.deviceRotation = deviceRotation;
@@ -142,13 +163,21 @@ async function start() {
     console.log(chalk.green('[BanProtection] Active'));
     console.log(chalk.green(`[DeviceRotation] Using: ${deviceRotation.getDeviceName()}`));
 
+    // Auto-rotate device and fingerprint every 30 minutes
     setInterval(() => {
         const rotatedDevice = deviceRotation.autoRotate();
-        if (rotatedDevice) console.log(chalk.green(`[DeviceRotation] Auto-rotated to: ${deviceRotation.getDeviceName()}`));
+        if (rotatedDevice) {
+            console.log(chalk.green(`[DeviceRotation] Auto-rotated to: ${deviceRotation.getDeviceName()}`));
+        }
         const rotatedFingerprint = fingerprintManager.autoRotate();
-        if (rotatedFingerprint) console.log(chalk.green(`[FingerprintManager] Auto-rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
+        if (rotatedFingerprint) {
+            console.log(chalk.green(`[FingerprintManager] Auto-rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
+        }
     }, 30 * 60 * 1000);
 
+    // ==============================================
+    // PAIRING CODE REQUEST
+    // ==============================================
     if (needsPairing && phoneNumber) {
         try {
             const code = await sock.requestPairingCode(phoneNumber);
@@ -164,6 +193,9 @@ async function start() {
         }
     }
 
+    // ==============================================
+    // EVENT HANDLERS
+    // ==============================================
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
@@ -194,23 +226,26 @@ async function start() {
         }
     });
 
+    // ==============================================
+    // MESSAGE HANDLER
+    // ==============================================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         console.log(chalk.gray(`[Debug] messages.upsert fired — type: ${type}, count: ${messages.length}`));
 
         for (const msg of messages) {
             const senderJid = msg.key.remoteJid;
             const participant = msg.key.participant || senderJid;
-            
+
             const botJid = sock.user?.id || null;
             const botNumber = botJid ? botJid.split('@')[0].replace(/[^0-9]/g, '') : '';
             const senderNumber = senderJid ? senderJid.split('@')[0].replace(/[^0-9]/g, '') : '';
-            
+
             const isBotJid = senderJid === botJid;
             const isBotNumber = senderNumber === botNumber;
             const isFromMe = msg.key.fromMe;
-            
+
             const isSelf = isFromMe && (isBotJid || isBotNumber);
-            
+
             const previewBody =
                 msg.message?.conversation ||
                 msg.message?.extendedTextMessage?.text ||
@@ -258,6 +293,7 @@ async function start() {
             };
 
             try {
+                // Rotate device/fingerprint if needed before command execution
                 if (deviceRotation.shouldRotate()) {
                     deviceRotation.rotateDevice();
                     console.log(chalk.cyan(`[DeviceRotation] Rotated to: ${deviceRotation.getDeviceName()}`));
