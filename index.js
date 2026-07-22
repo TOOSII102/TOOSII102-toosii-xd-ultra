@@ -14,29 +14,6 @@ const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
-// ==============================================
-// IMPORT PROTECTION MODULES
-// ==============================================
-const AntiDetection = require('./lib/antiDetection');
-const BanProtection = require('./lib/banProtection');
-const DeviceRotation = require('./lib/deviceRotation');
-const ProxyManager = require('./lib/proxyManager');
-const FingerprintManager = require('./lib/fingerprintManager');
-const EncryptionManager = require('./lib/encryptionManager');
-
-// ==============================================
-// IMPORT CORE MODULES (now from lib)
-// ==============================================
-const { WhatsAppKiller, WhatsAppKillerStop } = require('./lib/whatsappKiller');
-const {
-    PhoneAttacks,
-    SpamCommand,
-    CallbombCommand,
-    PhoneInfoCommand,
-    SpamStopCommand,
-    CallbombStopCommand
-} = require('./lib/phoneAttacks');
-
 const logger = pino({ level: 'silent' });
 
 const PLACEHOLDER_NUMBER = '254700000000';
@@ -54,23 +31,8 @@ async function start() {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
-    // ==============================================
-    // LOAD COMMANDS
-    // ==============================================
+    // Load commands – should only include ping, menu, owner
     const commands = loadCommands();
-
-    // Initialize WhatsApp Killer
-    const killer = new WhatsAppKiller();
-    commands.set('killwa', killer);
-    commands.set('killwa_stop', new WhatsAppKillerStop(killer));
-
-    // Initialize Silent Phone Attacks
-    const phoneAttacks = new PhoneAttacks();
-    commands.set('spam', new SpamCommand(phoneAttacks));
-    commands.set('callbomb', new CallbombCommand(phoneAttacks));
-    commands.set('phoneinfo', new PhoneInfoCommand(phoneAttacks));
-    commands.set('spam_stop', new SpamStopCommand(phoneAttacks));
-    commands.set('callbomb_stop', new CallbombStopCommand(phoneAttacks));
 
     // ==============================================
     // PAIRING LOGIC
@@ -99,7 +61,7 @@ async function start() {
         phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
 
         if (phoneNumber.length < 7) {
-            console.error(chalk.red(`[${BOT_NAME}] "${phoneNumber}" doesn't look like a full international number (too short). Restart and enter it again, e.g. countrycode + number, no + or spaces.`));
+            console.error(chalk.red(`[${BOT_NAME}] "${phoneNumber}" doesn't look like a full international number.`));
             process.exit(1);
         }
     }
@@ -121,61 +83,6 @@ async function start() {
     });
 
     // ==============================================
-    // INITIALIZE PROTECTION MODULES
-    // ==============================================
-    const stealth = new AntiDetection();
-    const banProtection = new BanProtection();
-    const deviceRotation = new DeviceRotation();
-    const proxyManager = new ProxyManager();
-    const fingerprintManager = new FingerprintManager();
-    const encryptionManager = new EncryptionManager();
-
-    stealth.sock = sock;
-    console.log(chalk.green('[Stealth] Anti-detection initialized'));
-
-    if (process.env.PROXIES) {
-        const proxyList = process.env.PROXIES.split(',').map(p => p.trim());
-        proxyManager.loadProxies(proxyList);
-    }
-
-    console.log(chalk.green('[AdvancedStealth] Proxy manager initialized'));
-    console.log(chalk.green(`[AdvancedStealth] ${fingerprintManager.getCurrentDeviceName()} fingerprint loaded`));
-    console.log(chalk.green(`[AdvancedStealth] Encryption: ${encryptionManager.enabled ? 'ON' : 'OFF'}`));
-    console.log(chalk.green(`[AdvancedStealth] Auto-cleanup: ${process.env.AUTO_CLEANUP === 'true' ? 'ON' : 'OFF'}`));
-
-    // Pass protection instances to modules
-    killer.stealth = stealth;
-    killer.banProtection = banProtection;
-    killer.deviceRotation = deviceRotation;
-    killer.proxyManager = proxyManager;
-    killer.fingerprintManager = fingerprintManager;
-    killer.encryptionManager = encryptionManager;
-    killer.sock = sock;
-
-    phoneAttacks.stealth = stealth;
-    phoneAttacks.banProtection = banProtection;
-    phoneAttacks.deviceRotation = deviceRotation;
-    phoneAttacks.proxyManager = proxyManager;
-    phoneAttacks.fingerprintManager = fingerprintManager;
-    phoneAttacks.encryptionManager = encryptionManager;
-    phoneAttacks.sock = sock;
-
-    console.log(chalk.green('[BanProtection] Active'));
-    console.log(chalk.green(`[DeviceRotation] Using: ${deviceRotation.getDeviceName()}`));
-
-    // Auto-rotate device and fingerprint every 30 minutes
-    setInterval(() => {
-        const rotatedDevice = deviceRotation.autoRotate();
-        if (rotatedDevice) {
-            console.log(chalk.green(`[DeviceRotation] Auto-rotated to: ${deviceRotation.getDeviceName()}`));
-        }
-        const rotatedFingerprint = fingerprintManager.autoRotate();
-        if (rotatedFingerprint) {
-            console.log(chalk.green(`[FingerprintManager] Auto-rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
-        }
-    }, 30 * 60 * 1000);
-
-    // ==============================================
     // PAIRING CODE REQUEST
     // ==============================================
     if (needsPairing && phoneNumber) {
@@ -187,7 +94,7 @@ async function start() {
             const statusCode = err?.output?.statusCode || err?.data?.statusCode || 'unknown';
             console.error(chalk.red('[Pairing] Failed to generate pairing code:'), err.message, chalk.gray(`(status: ${statusCode})`));
             if (statusCode === 405 || statusCode === 428) {
-                console.log(chalk.yellow('[Pairing] This status often means WhatsApp is rejecting the connection from this server\'s IP address (common on shared/datacenter hosting). This is not something the bot code can fix — it needs a different network/IP, or a VPS with a residential-style IP.'));
+                console.log(chalk.yellow('[Pairing] This may be due to datacenter IP. Consider using a residential proxy.'));
             }
             console.log(chalk.yellow('[Pairing] Restart the bot to try again.'));
         }
@@ -204,17 +111,9 @@ async function start() {
         if (connection === 'open') {
             console.log(chalk.green(`[${BOT_NAME}] Connected ✅`));
             console.log(chalk.cyan(`[${BOT_NAME}] Commands loaded:`));
-            console.log(chalk.gray(`  └─ .killwa, .killwa_stop - Force close WhatsApp (BUG INJECTION)`));
-            console.log(chalk.gray(`  └─ .spam, .spam_stop - Silent message spam + FEEDBACK`));
-            console.log(chalk.gray(`  └─ .callbomb, .callbomb_stop - Silent call flooding + FEEDBACK`));
-            console.log(chalk.gray(`  └─ .phoneinfo - Global phone number lookup + PRESENCE`));
             console.log(chalk.gray(`  └─ .ping - Check bot latency`));
-            console.log(chalk.gray(`  └─ .menu - Show this menu`));
-            console.log(chalk.green(`[Stealth] Anti-detection active - Human behavior simulation ON`));
-            console.log(chalk.green(`[BanProtection] ${banProtection.getStats().blacklistSize} blacklisted numbers`));
-            console.log(chalk.green(`[DeviceRotation] Device: ${deviceRotation.getDeviceName()} (${deviceRotation.getOS()})`));
-            console.log(chalk.green(`[FingerprintManager] Current: ${fingerprintManager.getCurrentDeviceName()}`));
-            console.log(chalk.green(`[ProxyManager] ${proxyManager.enabled ? 'Enabled' : 'Disabled'} (${proxyManager.proxies.length} proxies)`));
+            console.log(chalk.gray(`  └─ .menu - Show available commands`));
+            console.log(chalk.gray(`  └─ .owner - Show bot owner info`));
         }
 
         if (connection === 'close') {
@@ -252,7 +151,7 @@ async function start() {
                 '(no text / not a text message)';
 
             console.log(chalk.gray(
-                `[Debug] from=${senderJid} | fromMe=${msg.key.fromMe} | isSelf=${isSelf} | botJid=${botJid} | body="${previewBody}"`
+                `[Debug] from=${senderJid} | fromMe=${msg.key.fromMe} | isSelf=${isSelf} | body="${previewBody}"`
             ));
 
             if (!msg.message) {
@@ -261,7 +160,7 @@ async function start() {
             }
 
             if (isSelf) {
-                console.log(chalk.gray('[Debug] Skipping: Message is from bot JID'));
+                console.log(chalk.gray('[Debug] Skipping: Message is from bot itself'));
                 continue;
             }
 
@@ -293,15 +192,6 @@ async function start() {
             };
 
             try {
-                // Rotate device/fingerprint if needed before command execution
-                if (deviceRotation.shouldRotate()) {
-                    deviceRotation.rotateDevice();
-                    console.log(chalk.cyan(`[DeviceRotation] Rotated to: ${deviceRotation.getDeviceName()}`));
-                }
-                if (fingerprintManager.shouldRotate()) {
-                    fingerprintManager.rotateFingerprint();
-                    console.log(chalk.cyan(`[FingerprintManager] Rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
-                }
                 await command.execute(sock, msg, args, ctx);
             } catch (err) {
                 console.error(chalk.red(`[Commands] Error running "${cmdName}":`), err);
