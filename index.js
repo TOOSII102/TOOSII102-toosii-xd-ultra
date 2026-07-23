@@ -14,6 +14,16 @@ const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 
+// ==============================================
+// 🛡️ STEALTH & PROTECTION MODULES
+// ==============================================
+const AntiDetection = require('./lib/antiDetection');
+const BanProtection = require('./lib/banProtection');
+const DeviceRotation = require('./lib/deviceRotation');
+const ProxyManager = require('./lib/proxyManager');
+const FingerprintManager = require('./lib/fingerprintManager');
+const EncryptionManager = require('./lib/encryptionManager');
+
 const logger = pino({ level: 'silent' });
 
 const PLACEHOLDER_NUMBER = '254700000000';
@@ -31,11 +41,15 @@ async function start() {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
-    // Load commands – should only include ping, menu, owner
-    const commands = loadCommands();
+    // ==============================================
+    // 📋 LOAD BASIC COMMANDS (ping, menu, owner, update)
+    // ==============================================
+    const commands = loadCommands();   // Only loads files with { name, execute }
+
+    // If you have update.js, it will be loaded automatically
 
     // ==============================================
-    // PAIRING LOGIC
+    // 🔗 PAIRING LOGIC
     // ==============================================
     const needsPairing = !state.creds.registered;
 
@@ -67,7 +81,7 @@ async function start() {
     }
 
     // ==============================================
-    // CREATE SOCKET
+    // 🚀 CREATE SOCKET
     // ==============================================
     const sock = makeWASocket({
         version,
@@ -83,7 +97,45 @@ async function start() {
     });
 
     // ==============================================
-    // PAIRING CODE REQUEST
+    // 🛡️ INITIALIZE ALL PROTECTION LAYERS
+    // ==============================================
+    const stealth = new AntiDetection();
+    const banProtection = new BanProtection();
+    const deviceRotation = new DeviceRotation();
+    const proxyManager = new ProxyManager();
+    const fingerprintManager = new FingerprintManager();
+    const encryptionManager = new EncryptionManager();
+
+    stealth.sock = sock;
+    console.log(chalk.green('[Stealth] Anti-detection initialized'));
+
+    if (process.env.PROXIES) {
+        const proxyList = process.env.PROXIES.split(',').map(p => p.trim());
+        proxyManager.loadProxies(proxyList);
+    }
+
+    console.log(chalk.green('[AdvancedStealth] Proxy manager initialized'));
+    console.log(chalk.green(`[AdvancedStealth] ${fingerprintManager.getCurrentDeviceName()} fingerprint loaded`));
+    console.log(chalk.green(`[AdvancedStealth] Encryption: ${encryptionManager.enabled ? 'ON' : 'OFF'}`));
+    console.log(chalk.green(`[AdvancedStealth] Auto-cleanup: ${process.env.AUTO_CLEANUP === 'true' ? 'ON' : 'OFF'}`));
+
+    console.log(chalk.green('[BanProtection] Active'));
+    console.log(chalk.green(`[DeviceRotation] Using: ${deviceRotation.getDeviceName()}`));
+
+    // Auto‑rotate device and fingerprint every 30 minutes
+    setInterval(() => {
+        const rotatedDevice = deviceRotation.autoRotate();
+        if (rotatedDevice) {
+            console.log(chalk.green(`[DeviceRotation] Auto-rotated to: ${deviceRotation.getDeviceName()}`));
+        }
+        const rotatedFingerprint = fingerprintManager.autoRotate();
+        if (rotatedFingerprint) {
+            console.log(chalk.green(`[FingerprintManager] Auto-rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
+        }
+    }, 30 * 60 * 1000);
+
+    // ==============================================
+    // 🔑 PAIRING CODE REQUEST
     // ==============================================
     if (needsPairing && phoneNumber) {
         try {
@@ -101,7 +153,7 @@ async function start() {
     }
 
     // ==============================================
-    // EVENT HANDLERS
+    // 📡 EVENT HANDLERS
     // ==============================================
     sock.ev.on('creds.update', saveCreds);
 
@@ -111,9 +163,17 @@ async function start() {
         if (connection === 'open') {
             console.log(chalk.green(`[${BOT_NAME}] Connected ✅`));
             console.log(chalk.cyan(`[${BOT_NAME}] Commands loaded:`));
-            console.log(chalk.gray(`  └─ .ping - Check bot latency`));
-            console.log(chalk.gray(`  └─ .menu - Show available commands`));
-            console.log(chalk.gray(`  └─ .owner - Show bot owner info`));
+            console.log(chalk.gray(`  └─ .ping - Check latency`));
+            console.log(chalk.gray(`  └─ .menu - Show commands`));
+            console.log(chalk.gray(`  └─ .owner - Show owner info`));
+            if (commands.has('update')) {
+                console.log(chalk.gray(`  └─ .update - Update bot from GitHub`));
+            }
+            console.log(chalk.green(`[Stealth] Anti-detection active - Human behavior simulation ON`));
+            console.log(chalk.green(`[BanProtection] ${banProtection.getStats().blacklistSize} blacklisted numbers`));
+            console.log(chalk.green(`[DeviceRotation] Device: ${deviceRotation.getDeviceName()} (${deviceRotation.getOS()})`));
+            console.log(chalk.green(`[FingerprintManager] Current: ${fingerprintManager.getCurrentDeviceName()}`));
+            console.log(chalk.green(`[ProxyManager] ${proxyManager.enabled ? 'Enabled' : 'Disabled'} (${proxyManager.proxies.length} proxies)`));
         }
 
         if (connection === 'close') {
@@ -126,7 +186,7 @@ async function start() {
     });
 
     // ==============================================
-    // MESSAGE HANDLER
+    // 💬 MESSAGE HANDLER (with self‑detection)
     // ==============================================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         console.log(chalk.gray(`[Debug] messages.upsert fired — type: ${type}, count: ${messages.length}`));
@@ -192,6 +252,15 @@ async function start() {
             };
 
             try {
+                // Rotate device/fingerprint if needed before command
+                if (deviceRotation.shouldRotate()) {
+                    deviceRotation.rotateDevice();
+                    console.log(chalk.cyan(`[DeviceRotation] Rotated to: ${deviceRotation.getDeviceName()}`));
+                }
+                if (fingerprintManager.shouldRotate()) {
+                    fingerprintManager.rotateFingerprint();
+                    console.log(chalk.cyan(`[FingerprintManager] Rotated to: ${fingerprintManager.getCurrentDeviceName()}`));
+                }
                 await command.execute(sock, msg, args, ctx);
             } catch (err) {
                 console.error(chalk.red(`[Commands] Error running "${cmdName}":`), err);
