@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SESSION_DIR = path.join(__dirname, '..', 'session');
+const OWNER_FILE = path.join(__dirname, '..', 'data', 'owner.json');
 
 // Get owner from session credentials
 function getOwnerFromSession() {
@@ -11,19 +12,8 @@ function getOwnerFromSession() {
         const credsPath = path.join(SESSION_DIR, 'creds.json');
         if (fs.existsSync(credsPath)) {
             const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-            
             if (creds.me && creds.me.id) {
                 return creds.me.id;
-            }
-            
-            if (creds.registered) {
-                for (const key of Object.keys(creds)) {
-                    if (typeof creds[key] === 'string' && 
-                        (creds[key].includes('@s.whatsapp.net') || 
-                         creds[key].includes('@lid'))) {
-                        return creds[key];
-                    }
-                }
             }
         }
     } catch (e) {
@@ -51,79 +41,61 @@ function getOwner() {
     return cachedOwner;
 }
 
-// Get both the owner's phone number and LID
+// Get owner identifiers (phone number and full JID)
 function getOwnerIdentifiers() {
     const owner = getOwner();
-    if (!owner) return { phone: null, lid: null };
-    
-    // Extract number from owner JID
-    const ownerNumber = owner.split('@')[0].replace(/[^0-9]/g, '');
-    
-    return {
-        jid: owner,
-        phone: ownerNumber,
-        // The LID is the owner's LID - we can't know it without storing it
-        // We'll check both formats
-    };
+    if (!owner) return { jid: null, phone: null };
+    const phone = owner.split('@')[0].replace(/[^0-9]/g, '');
+    return { jid: owner, phone };
 }
 
-// Check if sender is the owner (handles both phone and LID formats)
+// Robust isOwner: compare only the numeric phone number
 function isOwner(sender) {
     const owner = getOwner();
     if (!owner) return false;
-    
-    // Clean sender
+
+    // Extract numeric part from sender
     const senderNumber = sender.split('@')[0].replace(/[^0-9]/g, '');
     const ownerNumber = owner.split('@')[0].replace(/[^0-9]/g, '');
-    
-    // Check if sender matches the owner's number OR owner's full JID
-    // This handles both 254780719665@s.whatsapp.net and 268286071726080@lid
-    const isMatch = sender === owner || 
-                    senderNumber === ownerNumber ||
-                    sender.includes(ownerNumber) ||
-                    ownerNumber.includes(senderNumber);
-    
-    return isMatch;
+
+    // Also check if sender JID equals owner JID (exact match)
+    const exactMatch = sender === owner;
+
+    // Check if sender number matches owner number
+    const numberMatch = senderNumber === ownerNumber;
+
+    // Also handle the case where sender is a LID that contains the owner number
+    const lidMatch = sender.includes(ownerNumber) && sender.includes('@lid');
+
+    return exactMatch || numberMatch || lidMatch;
 }
 
-// Middleware wrapper for owner-only commands
 function ownerOnly(executeFn) {
     return async (sock, msg, args, ctx) => {
         const sender = ctx.sender || ctx.from;
         const owner = getOwner();
-        const ownerIdentifiers = getOwnerIdentifiers();
-        
-        // No owner found
+
         if (!owner) {
             await sock.sendMessage(ctx.from, {
-                text: `❌ *No Owner Found*\n\nNo session owner detected.\n\nPlease re-pair the bot by deleting the session folder and restarting.\n\nCommand: rm -rf session && npm start`
+                text: `❌ *No Owner Found*\n\nNo session owner detected.\n\nPlease re-pair the bot by deleting the session folder and restarting.`
             }, { quoted: msg });
             return;
         }
-        
-        // Check if sender is the owner
+
         if (!isOwner(sender)) {
             await sock.sendMessage(ctx.from, {
                 text: `❌ *Access Denied*\n\nYou are not authorized to use this command.\n\nOnly the bot deployer/owner can execute this command.\n\nOwner: ${owner}`
             }, { quoted: msg });
             return;
         }
-        
+
         return executeFn(sock, msg, args, ctx);
     };
-}
-
-// Force refresh owner cache
-function refreshOwner() {
-    cachedOwner = null;
-    cacheTime = 0;
-    return getOwner();
 }
 
 module.exports = {
     isOwner,
     ownerOnly,
     getOwner,
-    refreshOwner,
     getOwnerIdentifiers
 };
