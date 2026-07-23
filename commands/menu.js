@@ -1,12 +1,7 @@
 'use strict';
 
-const { BOT_NAME, PREFIX, OWNER_NUMBER } = require('../config');
-
-function isOwner(sender) {
-    const senderNumber = sender.split('@')[0].replace(/[^0-9]/g, '');
-    const ownerNumber = OWNER_NUMBER.replace(/[^0-9]/g, '');
-    return senderNumber === ownerNumber;
-}
+const { BOT_NAME, PREFIX } = require('../config');
+const { isOwner, getOwner, getOwnerIdentifiers } = require('../middleware/ownerOnly');
 
 module.exports = {
     name: 'menu',
@@ -17,28 +12,44 @@ module.exports = {
     execute: async (sock, msg, args, ctx) => {
         const sender = ctx.sender || ctx.from;
         const isOwnerUser = isOwner(sender);
+        const owner = getOwner();
+        const ownerIds = getOwnerIdentifiers();
 
-        let lines = [
+        let menu = [
             `╔═|〔  ${BOT_NAME} MENU  〕`,
             `║`,
-            `║ 📋 *AVAILABLE COMMANDS*`,
-            `║ ─────────────────────`,
-            `║ ▸ ${PREFIX}ping - Check bot latency`,
-            `║ ▸ ${PREFIX}menu - Show this menu`,
-            `║ ▸ ${PREFIX}owner - Show bot owner info`,
         ];
 
         if (isOwnerUser) {
-            lines.push(`║`);
-            lines.push(`║ 🔒 *Owner-only commands (disabled)*`);
-            lines.push(`║   No attack commands are currently loaded.`);
+            menu = menu.concat([
+                `║ 👑 *OWNER*`,
+                `║ ▸ JID: ${owner || 'Not set'}`,
+                `║ ▸ Phone: ${ownerIds.phone || 'Unknown'}`,
+                `║ ─────────────────────`,
+                `║ 📋 *AVAILABLE COMMANDS*`,
+                `║ ▸ ${PREFIX}ping - Check bot latency`,
+                `║ ▸ ${PREFIX}menu - Show this menu`,
+                `║ ▸ ${PREFIX}owner - Show owner info`,
+                `║ ▸ ${PREFIX}update - Update bot from GitHub`,
+                `║`,
+                `║ 🛡️ *STEALTH STATUS*`,
+                `║ ▸ Anti-detection: ACTIVE`,
+                `║ ▸ Proxy rotation: ${process.env.PROXIES ? 'ON' : 'OFF'}`,
+                `║ ▸ Device rotation: ACTIVE`,
+                `╚═|〔  ${BOT_NAME}  〕`
+            ]);
         } else {
-            lines.push(`║`);
-            lines.push(`║ 🔒 *Owner commands locked*`);
+            menu = menu.concat([
+                `║ 📋 *PUBLIC COMMANDS*`,
+                `║ ─────────────────────`,
+                `║ ▸ ${PREFIX}ping - Check bot latency`,
+                `║ ▸ ${PREFIX}menu - Show this menu`,
+                `║`,
+                `║ 🔒 Owner-only commands exist.`,
+                `╚═|〔  ${BOT_NAME}  〕`
+            ]);
         }
 
-        lines.push(`╚═|〔  ${BOT_NAME}  〕`);
-
-        await sock.sendMessage(ctx.from, { text: lines.join('\n') }, { quoted: msg });
+        await sock.sendMessage(ctx.from, { text: menu.join('\n') }, { quoted: msg });
     }
 };
