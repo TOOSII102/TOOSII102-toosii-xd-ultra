@@ -4,9 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SESSION_DIR = path.join(__dirname, '..', 'session');
-const OWNER_FILE = path.join(__dirname, '..', 'data', 'owner.json');
 
-// Get owner from session credentials
 function getOwnerFromSession() {
     try {
         const credsPath = path.join(SESSION_DIR, 'creds.json');
@@ -22,7 +20,6 @@ function getOwnerFromSession() {
     return null;
 }
 
-// Cache the owner
 let cachedOwner = null;
 let cacheTime = 0;
 const CACHE_DURATION = 60000;
@@ -34,14 +31,11 @@ function getOwner() {
         cacheTime = now;
         if (cachedOwner) {
             console.log(`[Owner] Detected owner from session: ${cachedOwner}`);
-        } else {
-            console.log('[Owner] No owner detected in session');
         }
     }
     return cachedOwner;
 }
 
-// Get owner identifiers (phone number and full JID)
 function getOwnerIdentifiers() {
     const owner = getOwner();
     if (!owner) return { jid: null, phone: null };
@@ -49,25 +43,18 @@ function getOwnerIdentifiers() {
     return { jid: owner, phone };
 }
 
-// Robust isOwner: compare only the numeric phone number
 function isOwner(sender) {
     const owner = getOwner();
     if (!owner) return false;
 
-    // Extract numeric part from sender
+    // Extract JUST the phone number from sender
     const senderNumber = sender.split('@')[0].replace(/[^0-9]/g, '');
     const ownerNumber = owner.split('@')[0].replace(/[^0-9]/g, '');
 
-    // Also check if sender JID equals owner JID (exact match)
-    const exactMatch = sender === owner;
+    console.log(`[Owner Check] Sender: ${senderNumber} | Owner: ${ownerNumber}`);
 
-    // Check if sender number matches owner number
-    const numberMatch = senderNumber === ownerNumber;
-
-    // Also handle the case where sender is a LID that contains the owner number
-    const lidMatch = sender.includes(ownerNumber) && sender.includes('@lid');
-
-    return exactMatch || numberMatch || lidMatch;
+    // Compare only the phone numbers
+    return senderNumber === ownerNumber;
 }
 
 function ownerOnly(executeFn) {
@@ -77,7 +64,7 @@ function ownerOnly(executeFn) {
 
         if (!owner) {
             await sock.sendMessage(ctx.from, {
-                text: `❌ *No Owner Found*\n\nNo session owner detected.\n\nPlease re-pair the bot by deleting the session folder and restarting.`
+                text: `❌ *No Owner Found*\n\nPlease re-pair the bot by deleting the session folder and restarting.`
             }, { quoted: msg });
             return;
         }
