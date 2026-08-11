@@ -29,7 +29,18 @@ The command categories mirror the compatible portions of the supplied command ar
 | **Education** | `.dict`, `.fruit`, `.poem` | Uses built-in learning prompts and glossary data. |
 | **Spiritual** | `.randverse` | Provides a short reflection. |
 | **Search** | `.wiki` | Retrieves a concise Wikipedia summary when network access is available. |
-| **Owner** | `.update` | Restricted to the linked bot owner. |
+| **Owner** | `.mode`, `.update` | Restricted to the linked bot owner. |
+
+## Bot access mode
+
+The linked WhatsApp account is the bot owner. The owner can check or change access with `.mode`, `.mode public`, or `.mode private`.
+
+| Mode | Who can run commands |
+|---|---|
+| **Public** | Anyone can run commands outside the **Owner** category. Owner-category commands remain restricted to the linked owner. |
+| **Private** | Only the linked owner can run any command. |
+
+The selected mode is stored locally in `data/bot-mode.json`, which is ignored by Git and survives a process restart.
 
 ## Project layout
 
@@ -47,6 +58,7 @@ commands/search/          # search category commands
 scripts/validate.js       # syntax and setup validation
 scripts/command-tests.js  # mock-based command behavior tests
 session/                  # generated auth state, ignored by Git
+data/                     # local runtime state such as bot mode, ignored by Git
 ```
 
 ## Validation

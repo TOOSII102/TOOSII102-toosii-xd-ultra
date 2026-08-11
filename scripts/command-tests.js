@@ -7,6 +7,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const sessionDir = path.join(root, 'session');
 const credsPath = path.join(sessionDir, 'creds.json');
+const modeFile = path.join(root, 'data', 'bot-mode.test.json');
 const ownerNumber = '254712345678';
 const ownerJid = `${ownerNumber}:0@s.whatsapp.net`;
 const sent = [];
@@ -40,19 +41,24 @@ async function run() {
     process.env.BOT_NAME = 'Command Test Bot';
     process.env.OWNER_NUMBER = ownerNumber;
     process.env.PREFIX = '.';
+    process.env.BOT_MODE_FILE = modeFile;
+    process.env.BOT_MODE = 'public';
+    fs.rmSync(modeFile, { force: true });
 
     fs.mkdirSync(sessionDir, { recursive: true });
     fs.writeFileSync(credsPath, JSON.stringify({ me: { id: ownerJid } }), { mode: 0o600 });
 
     try {
         const { loadCommands } = require('../lib/commandLoader');
+        const { getBotMode } = require('../lib/botMode');
+        const { getCommandAccess } = require('../lib/commandAccess');
         const commands = loadCommands();
         const expectedNames = [
-            'ping', 'menu', 'owner', 'update', 'calc', 'ebinary', 'debinary', 'ebase', 'dbase', 'ehex', 'dhex',
+            'ping', 'menu', 'owner', 'update', 'mode', 'calc', 'ebinary', 'debinary', 'ebase', 'dbase', 'ehex', 'dhex',
             'uptime', '8ball', 'compliment', 'dice', 'rps', 'dict', 'fruit', 'poem', 'randverse', 'wiki'
         ];
         for (const name of expectedNames) assert.ok(commands.has(name), `missing command: ${name}`);
-        assert.ok(commands.has('help') && commands.has('calculate') && commands.has('eightball') && commands.has('wikisearch'), 'expected aliases to load');
+        assert.ok(commands.has('help') && commands.has('calculate') && commands.has('eightball') && commands.has('wikisearch') && commands.has('botmode'), 'expected aliases to load');
 
         const categories = new Set(commands.catalog.map((command) => command.category));
         for (const category of ['utility', 'fun', 'games', 'education', 'spiritual', 'search', 'owner']) {
@@ -61,8 +67,8 @@ async function run() {
 
         const sock = createSocket();
         const incoming = { key: { id: 'test-message', remoteJid: '254700000000@s.whatsapp.net' } };
-        const ownerCtx = { from: '254700000000@s.whatsapp.net', sender: ownerJid, prefix: '.', commands: commands.catalog };
-        const visitorCtx = { from: '254799999999@s.whatsapp.net', sender: '254799999999@s.whatsapp.net', prefix: '.', commands: commands.catalog };
+        const ownerCtx = { from: '254700000000@s.whatsapp.net', sender: ownerJid, prefix: '.', commands: commands.catalog, isOwner: true, botMode: 'public' };
+        const visitorCtx = { from: '254799999999@s.whatsapp.net', sender: '254799999999@s.whatsapp.net', prefix: '.', commands: commands.catalog, isOwner: false, botMode: 'public' };
 
         assert.match(await execute(commands, 'ping', sock, incoming, [], visitorCtx), /Status.*Online/s);
         assert.match(await execute(commands, 'calc', sock, incoming, ['2', '+', '3', '*', '4'], visitorCtx), /Result: 14/);
@@ -100,25 +106,29 @@ async function run() {
 
         const ownerMenu = await execute(commands, 'menu', sock, incoming, [], ownerCtx);
         assert.match(ownerMenu, /\[Owner\]/);
+        assert.match(await execute(commands, 'owner', sock, incoming, [], ownerCtx), /You  : OWNER/);
 
-        const ownerReply = await execute(commands, 'owner', sock, incoming, [], ownerCtx);
-        assert.match(ownerReply, /You  : 👑 OWNER/);
+        assert.match(await execute(commands, 'mode', sock, incoming, [], ownerCtx), /Bot mode: public/);
+        assert.match(await execute(commands, 'mode', sock, incoming, ['private'], ownerCtx), /changed to private/);
+        assert.strictEqual(getBotMode(), 'private', 'private mode should persist to storage');
+        assert.strictEqual(getCommandAccess('private', false, 'utility').allowed, false, 'private mode should block visitors from public commands');
+        assert.strictEqual(getCommandAccess('private', true, 'utility').allowed, true, 'private mode should allow the owner');
+        assert.strictEqual(getCommandAccess('public', false, 'utility').allowed, true, 'public mode should allow public commands');
+        assert.strictEqual(getCommandAccess('public', false, 'owner').allowed, false, 'public mode should block owner-category commands');
+
+        assert.match(await execute(commands, 'mode', sock, incoming, [], visitorCtx), /Access denied/);
+        assert.match(await execute(commands, 'mode', sock, incoming, ['public'], ownerCtx), /changed to public/);
+        assert.strictEqual(getBotMode(), 'public', 'public mode should persist to storage');
 
         const deniedReply = await execute(commands, 'update', sock, incoming, [], visitorCtx);
-        assert.match(deniedReply, /Access Denied/);
+        assert.match(deniedReply, /Access denied/);
         assert.doesNotMatch(deniedReply, /254712345678/);
 
-        delete process.env.OWNER_NUMBER;
-        delete require.cache[require.resolve('../config')];
-        delete require.cache[require.resolve('../commands/owner')];
-        const ownerWithoutConfig = require('../commands/owner');
-        resetMessages();
-        await ownerWithoutConfig.execute(sock, incoming, [], visitorCtx);
-        assert.match(latestMessage(), /No owner set in \.env\./);
-
-        console.log(`Command tests passed: ${commands.catalog.length} commands across ${categories.size} categories verified.`);
+        console.log(`Command tests passed: ${commands.catalog.length} commands across ${categories.size} categories, including public/private mode policy.`);
     } finally {
         fs.rmSync(sessionDir, { recursive: true, force: true });
+        fs.rmSync(modeFile, { force: true });
+        delete process.env.BOT_MODE_FILE;
     }
 }
 

@@ -4,74 +4,58 @@ const fs = require('fs');
 const path = require('path');
 
 const SESSION_DIR = path.join(__dirname, '..', 'session');
+const CACHE_DURATION = 60000;
+let cachedOwner = null;
+let cacheTime = 0;
+
+function normalizePhone(value) {
+    return String(value || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+}
 
 function getOwnerFromSession() {
     try {
         const credsPath = path.join(SESSION_DIR, 'creds.json');
-        if (fs.existsSync(credsPath)) {
-            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-            if (creds.me && creds.me.id) {
-                return creds.me.id;
-            }
-        }
-    } catch (e) {
-        console.error('[Owner] Failed to read session:', e.message);
+        if (!fs.existsSync(credsPath)) return null;
+        const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+        return creds?.me?.id || null;
+    } catch (error) {
+        console.error('[Owner] Failed to read the linked session:', error.message);
+        return null;
     }
-    return null;
 }
-
-let cachedOwner = null;
-let cacheTime = 0;
-const CACHE_DURATION = 60000;
 
 function getOwner() {
     const now = Date.now();
-    if (!cachedOwner || (now - cacheTime) > CACHE_DURATION) {
+    if (!cachedOwner || now - cacheTime > CACHE_DURATION) {
         cachedOwner = getOwnerFromSession();
         cacheTime = now;
-        if (cachedOwner) {
-            console.log(`[Owner] Detected owner from session: ${cachedOwner}`);
-        }
     }
     return cachedOwner;
 }
 
 function getOwnerIdentifiers() {
-    const owner = getOwner();
-    if (!owner) return { jid: null, phone: null };
-    const phone = owner.split('@')[0].replace(/[^0-9]/g, '');
-    return { jid: owner, phone };
+    const jid = getOwner();
+    return { jid, phone: normalizePhone(jid) || null };
 }
 
 function isOwner(sender) {
-    const owner = getOwner();
-    if (!owner) return false;
-
-    // Extract JUST the phone number from sender
-    const senderNumber = sender.split('@')[0].replace(/[^0-9]/g, '');
-    const ownerNumber = owner.split('@')[0].replace(/[^0-9]/g, '');
-
-    console.log(`[Owner Check] Sender: ${senderNumber} | Owner: ${ownerNumber}`);
-
-    // Compare only the phone numbers
-    return senderNumber === ownerNumber;
+    const { phone: ownerPhone } = getOwnerIdentifiers();
+    const senderPhone = normalizePhone(sender);
+    return Boolean(ownerPhone) && senderPhone === ownerPhone;
 }
 
 function ownerOnly(executeFn) {
     return async (sock, msg, args, ctx) => {
-        const sender = ctx.sender || ctx.from;
-        const owner = getOwner();
-
-        if (!owner) {
+        if (!getOwner()) {
             await sock.sendMessage(ctx.from, {
-                text: `❌ *No Owner Found*\n\nPlease re-pair the bot by deleting the session folder and restarting.`
+                text: 'No linked owner session was found. Re-link an account you control before using owner commands.'
             }, { quoted: msg });
             return;
         }
 
-        if (!isOwner(sender)) {
+        if (!isOwner(ctx.sender || ctx.from)) {
             await sock.sendMessage(ctx.from, {
-                text: '❌ *Access Denied*\n\nYou are not authorized to use this command.\n\nOnly the bot deployer or owner can execute this command.'
+                text: 'Access denied. This command is restricted to the bot owner.'
             }, { quoted: msg });
             return;
         }
@@ -80,9 +64,4 @@ function ownerOnly(executeFn) {
     };
 }
 
-module.exports = {
-    isOwner,
-    ownerOnly,
-    getOwner,
-    getOwnerIdentifiers
-};
+module.exports = { normalizePhone, isOwner, ownerOnly, getOwner, getOwnerIdentifiers };
