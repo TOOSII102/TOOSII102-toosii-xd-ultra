@@ -103,6 +103,8 @@ async function run() {
         const visitorMenu = await execute(commands, 'menu', sock, incoming, [], visitorCtx);
         for (const category of ['Utility', 'Fun', 'Games', 'Education', 'Spiritual', 'Search']) assert.match(visitorMenu, new RegExp(`\\[${category}\\]`));
         assert.doesNotMatch(visitorMenu, /\[Owner\]/);
+        assert.match(visitorMenu, /║ ▸ \.calc\n/, 'menu should list the primary command name');
+        assert.doesNotMatch(visitorMenu, /Safely calculate|\.calculate|—/, 'menu should not include descriptions or aliases');
 
         const ownerMenu = await execute(commands, 'menu', sock, incoming, [], ownerCtx);
         assert.match(ownerMenu, /\[Owner\]/);

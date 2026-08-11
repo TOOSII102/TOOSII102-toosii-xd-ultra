@@ -44,8 +44,7 @@ module.exports = {
             lines.push('║');
             lines.push(`║ [${titleCase(category)}]`);
             for (const command of commands) {
-                const aliases = command.aliases?.length ? ` (${command.aliases.slice(0, 2).map((alias) => `${PREFIX}${alias}`).join(', ')})` : '';
-                lines.push(`║ ▸ ${PREFIX}${command.name}${aliases} — ${command.description}`);
+                lines.push(`║ ▸ ${PREFIX}${command.name}`);
             }
         }
 
