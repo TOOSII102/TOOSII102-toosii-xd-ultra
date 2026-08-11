@@ -251,7 +251,8 @@ async function start() {
                 from: senderJid,
                 sender: participant || senderJid,
                 isGroup: senderJid ? senderJid.endsWith('@g.us') : false,
-                prefix: PREFIX
+                prefix: PREFIX,
+                commands: commands.catalog
             };
 
             try {

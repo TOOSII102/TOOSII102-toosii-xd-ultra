@@ -1,55 +1,57 @@
 'use strict';
 
 const { BOT_NAME, PREFIX } = require('../config');
-const { isOwner, getOwner, getOwnerIdentifiers } = require('../middleware/ownerOnly');
+const { isOwner } = require('../middleware/ownerOnly');
+
+const CATEGORY_ORDER = ['utility', 'fun', 'games', 'education', 'spiritual', 'search', 'owner'];
+
+function titleCase(value) {
+    return value.replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function groupCommands(commands, includeOwner) {
+    const groups = new Map();
+    for (const command of commands || []) {
+        if (!includeOwner && command.category === 'owner') continue;
+        const category = command.category || 'utility';
+        if (!groups.has(category)) groups.set(category, []);
+        groups.get(category).push(command);
+    }
+    return [...groups.entries()]
+        .sort(([left], [right]) => {
+            const leftIndex = CATEGORY_ORDER.indexOf(left);
+            const rightIndex = CATEGORY_ORDER.indexOf(right);
+            return (leftIndex < 0 ? CATEGORY_ORDER.length : leftIndex) - (rightIndex < 0 ? CATEGORY_ORDER.length : rightIndex) || left.localeCompare(right);
+        })
+        .map(([category, commandsInCategory]) => [category, commandsInCategory.sort((left, right) => left.name.localeCompare(right.name))]);
+}
 
 module.exports = {
     name: 'menu',
     aliases: ['help', 'commands', 'cmds'],
-    description: 'Show all available commands',
+    description: 'Show available commands grouped by category.',
     category: 'utility',
-
     execute: async (sock, msg, args, ctx) => {
-        const sender = ctx.sender || ctx.from;
-        const isOwnerUser = isOwner(sender);
-        const owner = getOwner();
-        const ownerIds = getOwnerIdentifiers();
-
-        let menu = [
+        const owner = isOwner(ctx.sender || ctx.from);
+        const groups = groupCommands(ctx.commands, owner);
+        const lines = [
             `╔═|〔  ${BOT_NAME} MENU  〕`,
-            `║`,
+            '║',
+            `║ ▸ Access: ${owner ? 'Owner' : 'Public'}`
         ];
 
-        if (isOwnerUser) {
-            menu = menu.concat([
-                `║ 👑 *OWNER*`,
-                `║ ▸ JID: ${owner || 'Not set'}`,
-                `║ ▸ Phone: ${ownerIds.phone || 'Unknown'}`,
-                `║ ─────────────────────`,
-                `║ 📋 *AVAILABLE COMMANDS*`,
-                `║ ▸ ${PREFIX}ping - Check bot latency`,
-                `║ ▸ ${PREFIX}menu - Show this menu`,
-                `║ ▸ ${PREFIX}owner - Show owner info`,
-                `║ ▸ ${PREFIX}update - Update bot from GitHub`,
-                `║`,
-                `║ 🛡️ *STEALTH STATUS*`,
-                `║ ▸ Anti-detection: ACTIVE`,
-                `║ ▸ Proxy rotation: ${process.env.PROXIES ? 'ON' : 'OFF'}`,
-                `║ ▸ Device rotation: ACTIVE`,
-                `╚═|〔  ${BOT_NAME}  〕`
-            ]);
-        } else {
-            menu = menu.concat([
-                `║ 📋 *PUBLIC COMMANDS*`,
-                `║ ─────────────────────`,
-                `║ ▸ ${PREFIX}ping - Check bot latency`,
-                `║ ▸ ${PREFIX}menu - Show this menu`,
-                `║`,
-                `║ 🔒 Owner-only commands exist.`,
-                `╚═|〔  ${BOT_NAME}  〕`
-            ]);
+        for (const [category, commands] of groups) {
+            lines.push('║');
+            lines.push(`║ [${titleCase(category)}]`);
+            for (const command of commands) {
+                const aliases = command.aliases?.length ? ` (${command.aliases.slice(0, 2).map((alias) => `${PREFIX}${alias}`).join(', ')})` : '';
+                lines.push(`║ ▸ ${PREFIX}${command.name}${aliases} — ${command.description}`);
+            }
         }
 
-        await sock.sendMessage(ctx.from, { text: menu.join('\n') }, { quoted: msg });
-    }
+        lines.push('║');
+        lines.push(`╚═|〔 ${BOT_NAME} 〕`);
+        await sock.sendMessage(ctx.from, { text: lines.join('\n') }, { quoted: msg });
+    },
+    groupCommands
 };
