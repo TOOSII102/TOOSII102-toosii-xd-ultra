@@ -1,19 +1,20 @@
  Fresh WA Bot
 
-Clean Baileys-based WhatsApp bot with prefix commands (`.command`), built to plug
-straight into a session produced by your session generator.
+A minimal Baileys-based WhatsApp bot with prefix commands (`.command`).
 
 ## Setup
 
 ```bash
 npm install
+npm run check
 cp .env.example .env
-# paste your SESSION_ID from the pairing site into .env
+# Optionally set SESSION_ID in .env; otherwise the bot will prompt for a pairing code.
 npm start
 ```
 
-If `SESSION_ID` is empty, the bot falls back to printing a QR code in the terminal
-on first run — scan it with WhatsApp > Linked Devices.
+If `SESSION_ID` is empty, the bot prompts for a phone number and prints a pairing code. Complete the linking flow only for an account you control.
+
+> **Credential safety:** `.env` and the generated `session/` directory contain account credentials. They are ignored by Git and must never be committed. If a credential was committed previously, revoke or rotate it in the associated service before continuing.
 
 ## Project layout
 

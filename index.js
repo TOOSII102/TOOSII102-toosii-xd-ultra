@@ -25,6 +25,11 @@ const FingerprintManager = require('./lib/fingerprintManager');
 const EncryptionManager = require('./lib/encryptionManager');
 
 const logger = pino({ level: 'silent' });
+const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
+
+function debug(message) {
+    if (DEBUG_LOGS) console.log(chalk.gray(message));
+}
 
 const PLACEHOLDER_NUMBER = '254700000000';
 const PLACEHOLDER_SESSION_MARKER = 'PASTE_YOUR_SESSION_STRING_HERE';
@@ -189,17 +194,22 @@ async function start() {
     // 💬 MESSAGE HANDLER (with self‑detection)
     // ==============================================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        console.log(chalk.gray(`[Debug] messages.upsert fired — type: ${type}, count: ${messages.length}`));
+        // Only execute newly received messages; `append` commonly contains history replay.
+        if (type !== 'notify') return;
+        debug(`[Debug] messages.upsert fired — count: ${messages.length}`);
 
         for (const msg of messages) {
             const senderJid = msg.key.remoteJid;
             const participant = msg.key.participant || senderJid;
 
+            // Ignore WhatsApp status updates and incomplete envelope records.
+            if (!msg.message || senderJid === 'status@broadcast') continue;
+
             const botJid = sock.user?.id || null;
             const botNumber = botJid ? botJid.split('@')[0].replace(/[^0-9]/g, '') : '';
-            const senderNumber = senderJid ? senderJid.split('@')[0].replace(/[^0-9]/g, '') : '';
+            const senderNumber = participant ? participant.split('@')[0].replace(/[^0-9]/g, '') : '';
 
-            const isBotJid = senderJid === botJid;
+            const isBotJid = participant === botJid;
             const isBotNumber = senderNumber === botNumber;
             const isFromMe = msg.key.fromMe;
 
@@ -210,17 +220,10 @@ async function start() {
                 msg.message?.extendedTextMessage?.text ||
                 '(no text / not a text message)';
 
-            console.log(chalk.gray(
-                `[Debug] from=${senderJid} | fromMe=${msg.key.fromMe} | isSelf=${isSelf} | body="${previewBody}"`
-            ));
-
-            if (!msg.message) {
-                console.log(chalk.gray('[Debug] Skipping: No message'));
-                continue;
-            }
+            debug(`[Debug] from=${senderJid} | fromMe=${msg.key.fromMe} | isSelf=${isSelf}`);
 
             if (isSelf) {
-                console.log(chalk.gray('[Debug] Skipping: Message is from bot itself'));
+                debug('[Debug] Skipping: Message is from bot itself');
                 continue;
             }
 
@@ -229,7 +232,7 @@ async function start() {
                 : previewBody;
 
             if (!body.startsWith(PREFIX)) {
-                console.log(chalk.gray(`[Debug] Skipping: No prefix (${PREFIX})`));
+                debug(`[Debug] Skipping: No prefix (${PREFIX})`);
                 continue;
             }
 
@@ -238,11 +241,11 @@ async function start() {
             const command = commands.get(cmdName);
 
             if (!command) {
-                console.log(chalk.gray(`[Debug] Command not found: ${cmdName}`));
+                debug(`[Debug] Command not found: ${cmdName}`);
                 continue;
             }
 
-            console.log(chalk.green(`[Debug] Executing command: ${cmdName}`));
+            debug(`[Debug] Executing command: ${cmdName}`);
 
             const ctx = {
                 from: senderJid,

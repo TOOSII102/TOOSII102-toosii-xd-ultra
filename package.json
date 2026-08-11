@@ -4,7 +4,8 @@
   "description": "TOOSII-XD-ULTRA — Baileys WhatsApp bot with prefix commands",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "check": "node scripts/validate.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

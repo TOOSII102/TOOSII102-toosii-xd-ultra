@@ -71,7 +71,7 @@ function ownerOnly(executeFn) {
 
         if (!isOwner(sender)) {
             await sock.sendMessage(ctx.from, {
-                text: `❌ *Access Denied*\n\nYou are not authorized to use this command.\n\nOnly the bot deployer/owner can execute this command.\n\nOwner: ${owner}`
+                text: '❌ *Access Denied*\n\nYou are not authorized to use this command.\n\nOnly the bot deployer or owner can execute this command.'
             }, { quoted: msg });
             return;
         }
