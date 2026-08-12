@@ -1,6 +1,7 @@
 'use strict';
 
 const { requestJson } = require('../../lib/keithApi');
+const { checkRateLimit } = require('../../lib/rateLimiter');
 
 const MAX_URL_LENGTH = 1000;
 const PLATFORM_RULES = {
@@ -99,6 +100,9 @@ async function handleDownload(sock, msg, ctx, args, platform, kind = 'video') {
     let source;
     try { source = parseSource(args.join(' ').trim(), platform); }
     catch (error) { return reply(sock, msg, ctx, `Media error: ${error.message}`); }
+
+    const limit = checkRateLimit('download', ctx.sender || ctx.from);
+    if (!limit.allowed) return reply(sock, msg, ctx, `Media rate limit reached. Try again in ${limit.retryAfterSeconds} seconds.`);
 
     const result = await resolveMedia(platform, source, kind);
     if (result) {

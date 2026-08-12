@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 const sessionDir = path.join(root, 'session');
 const credsPath = path.join(sessionDir, 'creds.json');
 const notesFile = path.join(root, 'data', 'notes.json');
+const rateLimitFile = path.join(root, 'data', 'rate-limits.test.json');
 const ownerNumber = '254712345678';
 const ownerJid = `${ownerNumber}:0@s.whatsapp.net`;
 const sent = [];
@@ -40,7 +41,10 @@ async function run() {
     process.env.BOT_NAME = 'Command Test Bot';
     process.env.PREFIX = '.';
     process.env.OWNER_NUMBER = ownerNumber;
+    process.env.RATE_LIMIT_ENABLED = 'false';
+    process.env.RATE_LIMIT_FILE = rateLimitFile;
     fs.rmSync(notesFile, { force: true });
+    fs.rmSync(rateLimitFile, { force: true });
     fs.mkdirSync(sessionDir, { recursive: true });
     fs.writeFileSync(credsPath, JSON.stringify({ me: { id: ownerJid } }), { mode: 0o600 });
 
@@ -149,6 +153,9 @@ async function run() {
     } finally {
         fs.rmSync(sessionDir, { recursive: true, force: true });
         fs.rmSync(notesFile, { force: true });
+        fs.rmSync(rateLimitFile, { force: true });
+        delete process.env.RATE_LIMIT_ENABLED;
+        delete process.env.RATE_LIMIT_FILE;
     }
 }
 

@@ -49,12 +49,24 @@ The selected mode is stored locally in `data/bot-mode.json`, which is ignored by
 
 The optional `KEITH_API_BASE_URL` setting powers `.search`, `.shorten`, `.fancy`, `.translate`, `.ai`, and the media resolvers. These commands use strict HTTPS validation, encoded parameters, response limits, and an eight-second timeout. If the API cannot be reached, `.search` returns a direct Google search URL, `.shorten` returns the original URL, `.fancy` returns the original plain text, `.translate` returns the original text, `.ai` suggests using search, and the media commands return the original source link. No API key is stored by the bot for these commands.
 
+## AI and media anti-spam protection
+
+AI and download commands use separate **persistent per-user** quotas. The rate-limit state is stored in `data/rate-limits.json`, is ignored by Git, and survives a bot restart. A rejected request does not call the external provider or resolver.
+
+| Scope | Default quota | Tuning variables |
+|---|---:|---|
+| AI | 4 requests per 60 seconds | `AI_RATE_LIMIT_MAX`, `AI_RATE_LIMIT_WINDOW_SECONDS` |
+| Download | 3 requests per 60 seconds | `MEDIA_RATE_LIMIT_MAX`, `MEDIA_RATE_LIMIT_WINDOW_SECONDS` |
+
+Set `RATE_LIMIT_ENABLED=false` only for controlled local testing. Users who exceed a limit receive a clear wait-time response, while other users retain their own independent quotas.
+
 ## Project layout
 
 ```text
 index.js                  # connects to WhatsApp and routes messages to commands
 config.js                 # prefix, bot name, and session settings
 lib/commandLoader.js      # recursively loads command objects and category folders
+lib/rateLimiter.js         # persistent per-user AI and media rate limiting
 commands/                 # public and owner command modules
 commands/utility/         # utility category commands
 commands/ai/              # bounded AI assistant commands
@@ -73,7 +85,7 @@ data/                     # local runtime state such as bot mode, ignored by Git
 
 ## Validation
 
-Run `npm run check` to syntax-check every JavaScript file and confirm credential-safe setup files exist. Run `npm test` to exercise the loaded command catalog, categories, aliases, local command replies, notes persistence, owner access controls, group metadata behavior, and mocked public-information services without connecting to WhatsApp.
+Run `npm run check` to syntax-check every JavaScript file and confirm credential-safe setup files exist. Run `npm test` to exercise the loaded command catalog, categories, aliases, local command replies, notes persistence, owner access controls, group metadata behavior, and mocked public-information services without connecting to WhatsApp. The test suite also verifies rate-limit persistence, expiry, per-user isolation, and blocked-provider prevention.
 
 ## Adding a command
 

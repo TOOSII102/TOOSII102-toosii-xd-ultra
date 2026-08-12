@@ -1,6 +1,7 @@
 'use strict';
 
 const { requestJson } = require('../../lib/keithApi');
+const { checkRateLimit } = require('../../lib/rateLimiter');
 
 const MAX_PROMPT_LENGTH = 700;
 const MAX_REPLY_LENGTH = 1600;
@@ -48,6 +49,9 @@ module.exports = {
         const prompt = args.join(' ').trim();
         if (!prompt) return reply(sock, msg, ctx, `Usage: ${ctx.prefix}ai <question>`);
         if (prompt.length > MAX_PROMPT_LENGTH) return reply(sock, msg, ctx, `Questions are limited to ${MAX_PROMPT_LENGTH} characters.`);
+
+        const limit = checkRateLimit('ai', ctx.sender || ctx.from);
+        if (!limit.allowed) return reply(sock, msg, ctx, `AI rate limit reached. Try again in ${limit.retryAfterSeconds} seconds.`);
 
         const answer = await askProvider(prompt);
         if (answer) return reply(sock, msg, ctx, `AI\n${answer}`);
