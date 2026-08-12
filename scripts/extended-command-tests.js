@@ -49,10 +49,10 @@ async function run() {
         const commands = loadCommands();
         const expected = [
             'alive', 'charcount', 'uppercase', 'lowercase', 'reverse', 'password', 'coinflip', 'joke', 'fact', 'qfun', 'quote',
-            'numfact', 'age', 'countdown', 'time', 'notes', 'addnote', 'getnote', 'getnotes', 'updatenote', 'delnote', 'delallnotes', 'listall',
+            'numfact', 'age', 'countdown', 'time', 'notes', 'addnote', 'getnote', 'getnotes', 'updatenote', 'delnote', 'delallnotes', 'listall', 'shorten', 'fancy', 'translate',
             'truth', 'dare', 'wyr', 'paranoia', 'nhie', 'pickupline', 'zenquote', 'roast', 'meme', 'quiz', 'ship', 'tod',
             'riddle', 'riddleanswer', 'trivia', 'triviaanswer', 'triviaend', 'wordchain', 'wcplay', 'wcend',
-            'country', 'github', 'ghrepo', 'recipe', 'groupinfo', 'admins', 'groupstats', 'repo'
+            'country', 'github', 'ghrepo', 'recipe', 'search', 'groupinfo', 'admins', 'groupstats', 'repo'
         ];
         for (const name of expected) assert.ok(commands.has(name), `missing command ${name}`);
 
@@ -93,6 +93,10 @@ async function run() {
             if (source.includes('restcountries')) return { ok: true, status: 200, json: async () => ([{ name: { common: 'Kenya' }, capital: ['Nairobi'], region: 'Africa', population: 50000000, languages: { eng: 'English' } }]) };
             if (source.includes('/users/')) return { ok: true, status: 200, json: async () => ({ login: 'octocat', name: 'The Octocat', public_repos: 8, followers: 10, html_url: 'https://github.com/octocat' }) };
             if (source.includes('/repos/')) return { ok: true, status: 200, json: async () => ({ full_name: 'octocat/Hello-World', description: 'Test repository', stargazers_count: 5, language: 'JavaScript', html_url: 'https://github.com/octocat/Hello-World' }) };
+            if (source.includes('shortener')) return { ok: true, status: 200, json: async () => ({ status: true, result: { shortened: 'https://tinyurl.com/test' } }) };
+            if (source.includes('fancytext')) return { ok: true, status: 200, json: async () => ({ input: 'hello', style: 3, result: '𝐡𝐞𝐥𝐥𝐨' }) };
+            if (source.includes('translate')) return { ok: true, status: 200, json: async () => ({ result: { originalText: 'hello', translatedText: 'Bonjour', targetLanguage: 'fr' } }) };
+            if (source.includes('search/google')) return { ok: true, status: 200, json: async () => ({ status: true, result: { items: [{ title: 'Example search result', link: 'https://example.com', snippet: 'A concise result.' }] } }) };
             return { ok: true, status: 200, json: async () => ({ meals: [{ strMeal: 'Test Meal', strCategory: 'Test', strArea: 'Global', strInstructions: 'Mix and serve.' }] }) };
         };
         try {
@@ -100,6 +104,20 @@ async function run() {
             assert.match(await execute(commands, 'github', basicSock, ['octocat'], ctx), /GitHub: octocat/);
             assert.match(await execute(commands, 'ghrepo', basicSock, ['octocat/Hello-World'], ctx), /Repository: octocat\/Hello-World/);
             assert.match(await execute(commands, 'recipe', basicSock, ['meal'], ctx), /Recipe: Test Meal/);
+            assert.match(await execute(commands, 'shorten', basicSock, ['https://example.com'], ctx), /https:\/\/tinyurl.com\/test/);
+            assert.strictEqual(await execute(commands, 'fancy', basicSock, ['3', 'hello'], ctx), '𝐡𝐞𝐥𝐥𝐨');
+            assert.match(await execute(commands, 'translate', basicSock, ['fr', 'hello'], ctx), /Bonjour/);
+            assert.match(await execute(commands, 'search', basicSock, ['example'], ctx), /Example search result/);
+        } finally {
+            global.fetch = originalFetch;
+        }
+
+        global.fetch = async () => { throw new Error('offline'); };
+        try {
+            assert.match(await execute(commands, 'shorten', basicSock, ['https://example.com'], ctx), /Fallback: use the original URL/);
+            assert.match(await execute(commands, 'fancy', basicSock, ['hello'], ctx), /Fallback \(plain text\):/);
+            assert.match(await execute(commands, 'translate', basicSock, ['fr', 'hello'], ctx), /Fallback \(original text\):/);
+            assert.match(await execute(commands, 'search', basicSock, ['example'], ctx), /Fallback:\nhttps:\/\/www.google.com\/search/);
         } finally {
             global.fetch = originalFetch;
         }

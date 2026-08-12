@@ -23,12 +23,12 @@ The command categories mirror the compatible portions of the supplied command ar
 
 | Category | Commands | Notes |
 |---|---|---|
-| **Utility** | `.alive`, `.calc`, text tools, encoders, `.password`, `.coinflip`, `.age`, `.countdown`, `.time`, and private notes commands | Local commands with validated input and persistent personal notes. |
+| **Utility** | `.alive`, `.calc`, text tools, encoders, `.password`, `.coinflip`, `.age`, `.countdown`, `.time`, `.shorten`, `.fancy`, `.translate`, and private notes commands | Local commands with validated input and persistent personal notes. API-backed commands fall back safely when the service is unavailable. |
 | **Fun** | `.8ball`, `.compliment`, `.truth`, `.dare`, `.wyr`, `.meme`, `.quiz`, `.ship`, and more | Uses local response sets and family-friendly prompts. |
 | **Games** | `.dice`, `.rps`, `.riddle`, `.trivia`, `.wordchain` | Lightweight games with chat-scoped state where needed. |
 | **Education** | `.dict`, `.fruit`, `.poem` | Uses built-in learning prompts and glossary data. |
 | **Spiritual** | `.randverse` | Provides a short reflection. |
-| **Search** | `.wiki`, `.country`, `.github`, `.ghrepo`, `.recipe` | Retrieves public information when network access is available. |
+| **Search** | `.wiki`, `.country`, `.github`, `.ghrepo`, `.recipe`, `.search` | Retrieves public information when network access is available. The web-search command returns a direct search link as a fallback. |
 | **Group** | `.groupinfo`, `.admins`, `.groupstats` | Read-only group information commands. |
 | **Owner** | `.mode`, `.repo`, `.update` | Restricted to the linked bot owner. |
 
@@ -42,6 +42,10 @@ The linked WhatsApp account is the bot owner. The owner can check or change acce
 | **Private** | Only the linked owner can run any command. |
 
 The selected mode is stored locally in `data/bot-mode.json`, which is ignored by Git and survives a process restart.
+
+## API-backed command fallbacks
+
+The optional `KEITH_API_BASE_URL` setting powers `.search`, `.shorten`, `.fancy`, and `.translate`. These commands use strict HTTPS validation, encoded parameters, response limits, and an eight-second timeout. If the API cannot be reached, `.search` returns a direct Google search URL, `.shorten` returns the original URL, `.fancy` returns the original plain text, and `.translate` returns the original text. No API key is stored by the bot for these commands.
 
 ## Project layout
 
