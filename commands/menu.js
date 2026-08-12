@@ -3,7 +3,7 @@
 const { BOT_NAME, PREFIX } = require('../config');
 const { isOwner } = require('../middleware/ownerOnly');
 
-const CATEGORY_ORDER = ['utility', 'fun', 'games', 'education', 'spiritual', 'search', 'group', 'owner'];
+const CATEGORY_ORDER = ['utility', 'ai', 'download', 'fun', 'games', 'education', 'spiritual', 'search', 'group', 'owner'];
 
 function titleCase(value) {
     return value.replace(/\b\w/g, (character) => character.toUpperCase());

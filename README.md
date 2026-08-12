@@ -24,6 +24,8 @@ The command categories mirror the compatible portions of the supplied command ar
 | Category | Commands | Notes |
 |---|---|---|
 | **Utility** | `.alive`, `.calc`, text tools, encoders, `.password`, `.coinflip`, `.age`, `.countdown`, `.time`, `.shorten`, `.fancy`, `.translate`, and private notes commands | Local commands with validated input and persistent personal notes. API-backed commands fall back safely when the service is unavailable. |
+| **AI** | `.ai` and aliases `.ask`, `.gpt`, `.gemini`, `.deepseek` | Uses a bounded text-provider chain and returns a search suggestion if every provider is unavailable. |
+| **Download** | `.ytv`, `.yta`, `.tiktok`, `.ig`, `.media` | Resolves authorized public YouTube, TikTok, and Instagram media links. Returns the original source link when a resolver fails. |
 | **Fun** | `.8ball`, `.compliment`, `.truth`, `.dare`, `.wyr`, `.meme`, `.quiz`, `.ship`, and more | Uses local response sets and family-friendly prompts. |
 | **Games** | `.dice`, `.rps`, `.riddle`, `.trivia`, `.wordchain` | Lightweight games with chat-scoped state where needed. |
 | **Education** | `.dict`, `.fruit`, `.poem` | Uses built-in learning prompts and glossary data. |
@@ -45,7 +47,7 @@ The selected mode is stored locally in `data/bot-mode.json`, which is ignored by
 
 ## API-backed command fallbacks
 
-The optional `KEITH_API_BASE_URL` setting powers `.search`, `.shorten`, `.fancy`, and `.translate`. These commands use strict HTTPS validation, encoded parameters, response limits, and an eight-second timeout. If the API cannot be reached, `.search` returns a direct Google search URL, `.shorten` returns the original URL, `.fancy` returns the original plain text, and `.translate` returns the original text. No API key is stored by the bot for these commands.
+The optional `KEITH_API_BASE_URL` setting powers `.search`, `.shorten`, `.fancy`, `.translate`, `.ai`, and the media resolvers. These commands use strict HTTPS validation, encoded parameters, response limits, and an eight-second timeout. If the API cannot be reached, `.search` returns a direct Google search URL, `.shorten` returns the original URL, `.fancy` returns the original plain text, `.translate` returns the original text, `.ai` suggests using search, and the media commands return the original source link. No API key is stored by the bot for these commands.
 
 ## Project layout
 
@@ -55,6 +57,8 @@ config.js                 # prefix, bot name, and session settings
 lib/commandLoader.js      # recursively loads command objects and category folders
 commands/                 # public and owner command modules
 commands/utility/         # utility category commands
+commands/ai/              # bounded AI assistant commands
+commands/download/        # public-media link resolvers
 commands/fun/             # fun category commands
 commands/games/           # games category commands
 commands/education/       # education category commands

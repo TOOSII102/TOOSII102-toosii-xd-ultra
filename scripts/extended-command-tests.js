@@ -52,7 +52,7 @@ async function run() {
             'numfact', 'age', 'countdown', 'time', 'notes', 'addnote', 'getnote', 'getnotes', 'updatenote', 'delnote', 'delallnotes', 'listall', 'shorten', 'fancy', 'translate',
             'truth', 'dare', 'wyr', 'paranoia', 'nhie', 'pickupline', 'zenquote', 'roast', 'meme', 'quiz', 'ship', 'tod',
             'riddle', 'riddleanswer', 'trivia', 'triviaanswer', 'triviaend', 'wordchain', 'wcplay', 'wcend',
-            'country', 'github', 'ghrepo', 'recipe', 'search', 'groupinfo', 'admins', 'groupstats', 'repo'
+            'country', 'github', 'ghrepo', 'recipe', 'search', 'ai', 'ytv', 'yta', 'tiktok', 'ig', 'media', 'groupinfo', 'admins', 'groupstats', 'repo'
         ];
         for (const name of expected) assert.ok(commands.has(name), `missing command ${name}`);
 
@@ -90,6 +90,11 @@ async function run() {
         const originalFetch = global.fetch;
         global.fetch = async (url) => {
             const source = String(url);
+            if (source.includes('/ai/gpt')) return { ok: true, status: 200, json: async () => ({ status: true, result: 'AI test response' }) };
+            if (source.includes('/download/video')) return { ok: true, status: 200, json: async () => ({ result: { download_url: 'https://cdn.example/video.mp4', title: 'Test YouTube Video' } }) };
+            if (source.includes('/download/audio')) return { ok: true, status: 200, json: async () => ({ result: { download_url: 'https://cdn.example/audio.mp3', title: 'Test YouTube Audio' } }) };
+            if (source.includes('tiktokdl3')) return { ok: true, status: 200, json: async () => ({ status: true, result: 'https://cdn.example/tiktok.mp4' }) };
+            if (source.includes('instadl')) return { ok: true, status: 200, json: async () => ({ result: { video: 'https://cdn.example/instagram.mp4', title: 'Test Instagram Video' } }) };
             if (source.includes('restcountries')) return { ok: true, status: 200, json: async () => ([{ name: { common: 'Kenya' }, capital: ['Nairobi'], region: 'Africa', population: 50000000, languages: { eng: 'English' } }]) };
             if (source.includes('/users/')) return { ok: true, status: 200, json: async () => ({ login: 'octocat', name: 'The Octocat', public_repos: 8, followers: 10, html_url: 'https://github.com/octocat' }) };
             if (source.includes('/repos/')) return { ok: true, status: 200, json: async () => ({ full_name: 'octocat/Hello-World', description: 'Test repository', stargazers_count: 5, language: 'JavaScript', html_url: 'https://github.com/octocat/Hello-World' }) };
@@ -108,6 +113,12 @@ async function run() {
             assert.strictEqual(await execute(commands, 'fancy', basicSock, ['3', 'hello'], ctx), '𝐡𝐞𝐥𝐥𝐨');
             assert.match(await execute(commands, 'translate', basicSock, ['fr', 'hello'], ctx), /Bonjour/);
             assert.match(await execute(commands, 'search', basicSock, ['example'], ctx), /Example search result/);
+            assert.match(await execute(commands, 'ai', basicSock, ['hello'], ctx), /AI test response/);
+            assert.match(await execute(commands, 'ytv', basicSock, ['https://www.youtube.com/watch?v=BaW_jenozKc'], ctx), /https:\/\/cdn.example\/video.mp4/);
+            assert.match(await execute(commands, 'yta', basicSock, ['https://www.youtube.com/watch?v=BaW_jenozKc'], ctx), /https:\/\/cdn.example\/audio.mp3/);
+            assert.match(await execute(commands, 'tiktok', basicSock, ['https://www.tiktok.com/@example/video/1'], ctx), /https:\/\/cdn.example\/tiktok.mp4/);
+            assert.match(await execute(commands, 'ig', basicSock, ['https://www.instagram.com/reel/abc/'], ctx), /https:\/\/cdn.example\/instagram.mp4/);
+            assert.match(await execute(commands, 'media', basicSock, ['https://www.instagram.com/reel/abc/'], ctx), /https:\/\/cdn.example\/instagram.mp4/);
         } finally {
             global.fetch = originalFetch;
         }
@@ -118,6 +129,11 @@ async function run() {
             assert.match(await execute(commands, 'fancy', basicSock, ['hello'], ctx), /Fallback \(plain text\):/);
             assert.match(await execute(commands, 'translate', basicSock, ['fr', 'hello'], ctx), /Fallback \(original text\):/);
             assert.match(await execute(commands, 'search', basicSock, ['example'], ctx), /Fallback:\nhttps:\/\/www.google.com\/search/);
+            assert.match(await execute(commands, 'ai', basicSock, ['hello'], ctx), /AI services are unavailable\. Fallback/);
+            assert.match(await execute(commands, 'ytv', basicSock, ['https://www.youtube.com/watch?v=BaW_jenozKc'], ctx), /Fallback source link/);
+            assert.match(await execute(commands, 'yta', basicSock, ['https://www.youtube.com/watch?v=BaW_jenozKc'], ctx), /Fallback source link/);
+            assert.match(await execute(commands, 'tiktok', basicSock, ['https://www.tiktok.com/@example/video/1'], ctx), /Fallback source link/);
+            assert.match(await execute(commands, 'ig', basicSock, ['https://www.instagram.com/reel/abc/'], ctx), /Fallback source link/);
         } finally {
             global.fetch = originalFetch;
         }
