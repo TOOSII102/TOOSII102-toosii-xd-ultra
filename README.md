@@ -23,13 +23,14 @@ The command categories mirror the compatible portions of the supplied command ar
 
 | Category | Commands | Notes |
 |---|---|---|
-| **Utility** | `.ping`, `.menu`, `.owner`, `.calc`, `.uptime`, `.ebinary`, `.debinary`, `.ebase`, `.dbase`, `.ehex`, `.dhex` | Local commands with input validation. |
-| **Fun** | `.8ball`, `.compliment` | Uses local response sets. |
-| **Games** | `.dice`, `.rps` | Lightweight games that do not require persistent game state. |
+| **Utility** | `.alive`, `.calc`, text tools, encoders, `.password`, `.coinflip`, `.age`, `.countdown`, `.time`, and private notes commands | Local commands with validated input and persistent personal notes. |
+| **Fun** | `.8ball`, `.compliment`, `.truth`, `.dare`, `.wyr`, `.meme`, `.quiz`, `.ship`, and more | Uses local response sets and family-friendly prompts. |
+| **Games** | `.dice`, `.rps`, `.riddle`, `.trivia`, `.wordchain` | Lightweight games with chat-scoped state where needed. |
 | **Education** | `.dict`, `.fruit`, `.poem` | Uses built-in learning prompts and glossary data. |
 | **Spiritual** | `.randverse` | Provides a short reflection. |
-| **Search** | `.wiki` | Retrieves a concise Wikipedia summary when network access is available. |
-| **Owner** | `.mode`, `.update` | Restricted to the linked bot owner. |
+| **Search** | `.wiki`, `.country`, `.github`, `.ghrepo`, `.recipe` | Retrieves public information when network access is available. |
+| **Group** | `.groupinfo`, `.admins`, `.groupstats` | Read-only group information commands. |
+| **Owner** | `.mode`, `.repo`, `.update` | Restricted to the linked bot owner. |
 
 ## Bot access mode
 
@@ -55,6 +56,7 @@ commands/games/           # games category commands
 commands/education/       # education category commands
 commands/spiritual/       # spiritual category commands
 commands/search/          # search category commands
+commands/group/           # read-only group category commands
 scripts/validate.js       # syntax and setup validation
 scripts/command-tests.js  # mock-based command behavior tests
 session/                  # generated auth state, ignored by Git
@@ -63,7 +65,7 @@ data/                     # local runtime state such as bot mode, ignored by Git
 
 ## Validation
 
-Run `npm run check` to syntax-check every JavaScript file and confirm credential-safe setup files exist. Run `npm test` to exercise the loaded command catalog, categories, aliases, command replies, owner access guard, and mocked Wikipedia response without connecting to WhatsApp.
+Run `npm run check` to syntax-check every JavaScript file and confirm credential-safe setup files exist. Run `npm test` to exercise the loaded command catalog, categories, aliases, local command replies, notes persistence, owner access controls, group metadata behavior, and mocked public-information services without connecting to WhatsApp.
 
 ## Adding a command
 
