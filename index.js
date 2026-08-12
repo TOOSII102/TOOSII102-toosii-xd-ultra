@@ -13,7 +13,7 @@ const readline = require('readline');
 const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
-const { isOwner } = require('./middleware/ownerOnly');
+const { isOwnerMessage, setRuntimeOwner } = require('./middleware/ownerOnly');
 const { getBotMode } = require('./lib/botMode');
 const { getCommandAccess } = require('./lib/commandAccess');
 
@@ -94,6 +94,11 @@ async function start() {
         markOnlineOnConnect: true
     });
 
+    // Capture both phone-JID and LID identities supplied by Baileys. This is
+    // required because WhatsApp may represent self-chat messages differently
+    // from the linked device identity stored in creds.json.
+    setRuntimeOwner(sock.user);
+
     // ==============================================
     // 🔑 PAIRING CODE REQUEST
     // ==============================================
@@ -118,6 +123,7 @@ async function start() {
         const { connection, lastDisconnect } = update;
 
         if (connection === 'open') {
+            setRuntimeOwner(sock.user);
             console.log(chalk.green(`[${BOT_NAME}] Connected.`));
             console.log(chalk.cyan(`[${BOT_NAME}] Loaded ${commands.catalog.length} commands across ${new Set(commands.catalog.map((command) => command.category)).size} categories.`));
             console.log(chalk.cyan(`[${BOT_NAME}] Access mode: ${getBotMode()}. Use .mode <public|private> as the owner to change it.`));
@@ -164,11 +170,6 @@ async function start() {
 
             debug(`[Debug] from=${senderJid} | fromMe=${msg.key.fromMe} | isSelf=${isSelf}`);
 
-            if (isSelf) {
-                debug('[Debug] Skipping: Message is from bot itself');
-                continue;
-            }
-
             const body = previewBody === '(no text / not a text message)'
                 ? (msg.message.imageMessage?.caption || msg.message.videoMessage?.caption || '')
                 : previewBody;
@@ -176,6 +177,10 @@ async function start() {
             if (!body.startsWith(PREFIX)) {
                 debug(`[Debug] Skipping: No prefix (${PREFIX})`);
                 continue;
+            }
+
+            if (isSelf) {
+                debug('[Debug] Allowing a prefixed self-chat command from the linked account');
             }
 
             const args = body.slice(PREFIX.length).trim().split(/\s+/);
@@ -190,7 +195,7 @@ async function start() {
             debug(`[Debug] Executing command: ${cmdName}`);
 
             const sender = participant || senderJid;
-            const owner = isOwner(sender);
+            const owner = isOwnerMessage(sender, isFromMe);
             const botMode = getBotMode();
             const access = getCommandAccess(botMode, owner, command.category);
             const ctx = {
