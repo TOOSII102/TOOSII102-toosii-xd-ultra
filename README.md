@@ -55,8 +55,8 @@ AI and download commands use separate **persistent per-user** quotas. The rate-l
 
 | Scope | Default quota | Tuning variables |
 |---|---:|---|
-| AI | 4 requests per 60 seconds | `AI_RATE_LIMIT_MAX`, `AI_RATE_LIMIT_WINDOW_SECONDS` |
-| Download | 3 requests per 60 seconds | `MEDIA_RATE_LIMIT_MAX`, `MEDIA_RATE_LIMIT_WINDOW_SECONDS` |
+| AI | 1 request per 2 seconds | `AI_RATE_LIMIT_MAX`, `AI_RATE_LIMIT_WINDOW_SECONDS` |
+| Download | 1 request per 2 seconds | `MEDIA_RATE_LIMIT_MAX`, `MEDIA_RATE_LIMIT_WINDOW_SECONDS` |
 
 Set `RATE_LIMIT_ENABLED=false` only for controlled local testing. Users who exceed a limit receive a clear wait-time response, while other users retain their own independent quotas.
 
