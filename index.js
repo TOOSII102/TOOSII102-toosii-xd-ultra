@@ -40,11 +40,10 @@ async function start() {
     console.log(chalk.cyan(`[${BOT_NAME}] Using WA protocol version ${version.join('.')} (latest: ${isLatest})`));
 
     // ==============================================
-    // 📋 LOAD BASIC COMMANDS (ping, menu, owner, update)
+    // 📋 LOAD BASIC COMMANDS (ping, menu, owner)
     // ==============================================
     const commands = loadCommands();   // Only loads files with { name, execute }
 
-    // If you have update.js, it will be loaded automatically
 
     // ==============================================
     // 🔗 PAIRING LOGIC

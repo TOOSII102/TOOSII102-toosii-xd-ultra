@@ -32,7 +32,7 @@ The command categories mirror the compatible portions of the supplied command ar
 | **Spiritual** | `.randverse` | Provides a short reflection. |
 | **Search** | `.wiki`, `.country`, `.github`, `.ghrepo`, `.recipe`, `.search` | Retrieves public information when network access is available. The web-search command returns a direct search link as a fallback. |
 | **Group** | `.groupinfo`, `.admins`, `.groupstats` | Read-only group information commands. |
-| **Owner** | `.mode`, `.repo`, `.update` | Restricted to the linked bot owner. |
+| **Owner** | `.mode`, `.repo` | Restricted to the linked bot owner. |
 
 ## Bot access mode
 

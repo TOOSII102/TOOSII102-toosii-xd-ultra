@@ -54,11 +54,12 @@ async function run() {
         const { getCommandAccess } = require('../lib/commandAccess');
         const commands = loadCommands();
         const expectedNames = [
-            'ping', 'menu', 'owner', 'update', 'mode', 'calc', 'ebinary', 'debinary', 'ebase', 'dbase', 'ehex', 'dhex',
+            'ping', 'menu', 'owner', 'mode', 'calc', 'ebinary', 'debinary', 'ebase', 'dbase', 'ehex', 'dhex',
             'uptime', '8ball', 'compliment', 'dice', 'rps', 'dict', 'fruit', 'poem', 'randverse', 'wiki'
         ];
         for (const name of expectedNames) assert.ok(commands.has(name), `missing command: ${name}`);
         assert.ok(commands.has('help') && commands.has('calculate') && commands.has('eightball') && commands.has('wikisearch') && commands.has('botmode'), 'expected aliases to load');
+        assert.ok(!commands.has('update') && !commands.has('upgrade') && !commands.has('pull'), 'update command and aliases should not load');
 
         const categories = new Set(commands.catalog.map((command) => command.category));
         for (const category of ['utility', 'fun', 'games', 'education', 'spiritual', 'search', 'owner']) {
@@ -122,9 +123,6 @@ async function run() {
         assert.match(await execute(commands, 'mode', sock, incoming, ['public'], ownerCtx), /changed to public/);
         assert.strictEqual(getBotMode(), 'public', 'public mode should persist to storage');
 
-        const deniedReply = await execute(commands, 'update', sock, incoming, [], visitorCtx);
-        assert.match(deniedReply, /Access denied/);
-        assert.doesNotMatch(deniedReply, /254712345678/);
 
         console.log(`Command tests passed: ${commands.catalog.length} commands across ${categories.size} categories, including public/private mode policy.`);
     } finally {
