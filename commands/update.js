@@ -3,10 +3,18 @@
 const { ownerOnly } = require('../middleware/ownerOnly');
 const { runRepositoryUpdate } = require('../lib/repositoryUpdate');
 
+const DEFAULT_REPOSITORY = 'https://github.com/TOOSII102/TOOSII102-toosii-xd-ultra';
+
 function resultMessage(result) {
     switch (result.status) {
-        case 'not-repository':
-            return 'Update unavailable: the bot directory is not a Git repository.';
+        case 'not-repository': {
+            const repository = process.env.REPOSITORY_URL || DEFAULT_REPOSITORY;
+            return [
+                'This deployment was uploaded as an archive, so it has no Git history and cannot check or pull updates.',
+                `Redeploy from the GitHub repository instead: ${repository}`,
+                'After the Git-backed redeploy, use `.update check` to check safely or `.update` to apply a fast-forward update.'
+            ].join('\n');
+        }
         case 'git-unavailable':
             return 'Update unavailable: Git is not installed or cannot be run by this service.';
         case 'working-tree-dirty':

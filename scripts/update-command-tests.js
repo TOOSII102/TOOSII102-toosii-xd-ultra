@@ -97,6 +97,8 @@ async function run() {
     });
     assert.strictEqual(failedMerge.status, 'merge-failed');
 
+    assert.match(updateCommand.resultMessage({ status: 'not-repository' }), /uploaded as an archive/);
+    assert.match(updateCommand.resultMessage({ status: 'not-repository' }), /github\.com\/TOOSII102\/TOOSII102-toosii-xd-ultra/);
     assert.match(updateCommand.resultMessage({ status: 'working-tree-dirty' }), /uncommitted changes/);
     assert.match(updateCommand.resultMessage({ status: 'update-available', upstream: 'origin/main', ahead: 0, behind: 1 }), /Run `\.update` to install it/);
     assert.match(updateCommand.resultMessage({ status: 'updated', before: 'aaaaaaa', after: 'bbbbbbb', upstream: 'origin/main', dependencyRefresh: 'not-needed' }), /Restart the bot through its deployment manager/);
