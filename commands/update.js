@@ -10,9 +10,10 @@ function resultMessage(result) {
         case 'not-repository': {
             const repository = process.env.REPOSITORY_URL || DEFAULT_REPOSITORY;
             return [
-                'This deployment was uploaded as an archive, so it has no Git history and cannot check or pull updates.',
-                `Redeploy from the GitHub repository instead: ${repository}`,
-                'After the Git-backed redeploy, use `.update check` to check safely or `.update` to apply a fast-forward update.'
+                'This deployment has no Git working tree, so the bot cannot check or pull updates from inside the process.',
+                `Source repository: ${repository}`,
+                'If this is a persistent server, deploy with `git clone` so `.update check` and `.update` can work.',
+                'If this is a managed host or an uploaded archive, redeploy through that host’s GitHub/deployment controls instead.'
             ].join('\n');
         }
         case 'git-unavailable':
