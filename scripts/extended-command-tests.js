@@ -146,6 +146,25 @@ async function run() {
             await assert.rejects(() => requestJson('/ai/gemini', { q: 'hi' }), /Failed to retrieve UUID register/);
             global.fetch = savedFetch;
 
+            // Regression: failure shapes beyond { status:false }. The service also uses
+            // { success:false } and nests failures under result, all behind HTTP 200.
+            const { assertPayloadSucceeded } = require('../lib/keithApi');
+            assert.throws(() => assertPayloadSucceeded({ success: false, message: 'SoundCloud failed' }), /SoundCloud failed/);
+            assert.throws(() => assertPayloadSucceeded({ status: false }), /failed request/);
+            assert.doesNotThrow(() => assertPayloadSucceeded({ status: true, result: 'fine' }));
+            assert.doesNotThrow(() => assertPayloadSucceeded([1, 2, 3]));
+
+            // Regression: resolver titles arrive HTML-escaped and must be decoded.
+            const mediaModule = require('../commands/download/media');
+            assert.strictEqual(mediaModule.decodeEntities('&#xdb4;&#xddc;&#xdad; &amp; &quot;x&quot;'), 'පොත & "x"');
+
+            // Newly supported download platforms must be recognised by hostname.
+            assert.strictEqual(mediaModule.detectPlatform('https://www.facebook.com/share/r/abc/'), 'facebook');
+            assert.strictEqual(mediaModule.detectPlatform('https://x.com/user/status/1'), 'twitter');
+            assert.strictEqual(mediaModule.detectPlatform('https://pin.it/abc'), 'pinterest');
+            assert.strictEqual(mediaModule.detectPlatform('https://www.mediafire.com/file/a/b/file'), 'mediafire');
+            assert.strictEqual(mediaModule.detectPlatform('https://example.com/video'), null);
+
             // Regression: providers ignore the identity contract and name themselves.
             const assistant = require('../commands/ai/assistant');
             const leaked = assistant.extractText({ status: true, result: "Hello! I am UnlimitedAI.Chat, created by the UnlimitedAI.Chat team. I'm here to help." });

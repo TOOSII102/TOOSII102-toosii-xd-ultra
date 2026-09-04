@@ -23,14 +23,14 @@ The command categories mirror the compatible portions of the supplied command ar
 
 | Category | Commands | Notes |
 |---|---|---|
-| **Utility** | `.alive`, `.calc`, text tools, encoders, `.password`, `.coinflip`, `.age`, `.countdown`, `.time`, `.shorten`, `.fancy`, `.translate`, and private notes commands | Local commands with validated input and persistent personal notes. API-backed commands fall back safely when the service is unavailable. |
+| **Utility** | `.alive`, `.calc`, text tools, encoders, `.password`, `.coinflip`, `.age`, `.countdown`, `.time`, `.shorten`, `.fancy`, `.translate`, `.ipinfo`, `.exchange`, `.ascii`, `.grammar`, and private notes commands | Local commands with validated input and persistent personal notes. API-backed commands fall back safely when the service is unavailable. |
 | **AI** | `.ai` and aliases `.ask`, `.gpt`, `.gemini`, `.deepseek` | Identifies as **Toosii AI**, created by **Toosii Tech**. This identity cannot be changed by user prompts; the command uses a bounded text-provider chain and a safe fallback. |
-| **Download** | `.ytv`, `.yta`, `.tiktok`, `.ig`, `.media` | Resolves authorized public YouTube, TikTok, and Instagram media links. Returns the original source link when a resolver fails. |
-| **Fun** | `.8ball`, `.compliment`, `.truth`, `.dare`, `.wyr`, `.meme`, `.quiz`, `.ship`, and more | Uses local response sets and family-friendly prompts. |
+| **Download** | `.ytv`, `.yta`, `.tiktok`, `.ig`, `.fb`, `.twitter`, `.mediafire`, `.soundcloud`, `.pinterest`, `.media` | Resolves authorized public YouTube, TikTok, Instagram, Facebook, X, MediaFire, SoundCloud, and Pinterest media links. Each platform tries several upstream resolvers in turn and returns the original source link when they all fail. |
+| **Fun** | `.8ball`, `.compliment`, `.truth`, `.dare`, `.wyr`, `.meme`, `.quiz`, `.ship`, `.pickup`, `.wyr2`, `.funjoke`, and more | Uses local response sets and family-friendly prompts. The `.pickup`, `.wyr2`, and `.funjoke` variants are API backed and report clearly when the service is unavailable. |
 | **Games** | `.dice`, `.rps`, `.riddle`, `.trivia`, `.wordchain` | Lightweight games with chat-scoped state where needed. |
-| **Education** | `.dict`, `.fruit`, `.poem` | Uses built-in learning prompts and glossary data. |
+| **Education** | `.dict`, `.fruit`, `.poem`, `.meaning`, `.physics`, `.chemistry`, `.solve` | Uses built-in learning prompts and glossary data. |
 | **Spiritual** | `.randverse` | Provides a short reflection. |
-| **Search** | `.wiki`, `.country`, `.github`, `.ghrepo`, `.recipe`, `.search` | Retrieves public information when network access is available. The web-search command returns a direct search link as a fallback. |
+| **Search** | `.wiki`, `.country`, `.github`, `.ghrepo`, `.recipe`, `.search`, `.lyrics`, `.verse`, `.movie`, `.news` | Retrieves public information when network access is available. `.country` uses the keyless World Bank country API. The web-search command returns a direct search link as a fallback. |
 | **Group** | `.groupinfo`, `.admins`, `.groupstats` | Read-only group information commands. |
 | **Owner** | `.mode`, `.repo` | Restricted to the linked bot owner. |
 
@@ -47,7 +47,7 @@ The selected mode is stored locally in `data/bot-mode.json`, which is ignored by
 
 ## API-backed command fallbacks
 
-The optional `KEITH_API_BASE_URL` setting powers `.search`, `.shorten`, `.fancy`, `.translate`, `.ai`, and the media resolvers. The AI command locally enforces the **Toosii AI / Toosii Tech** identity before any provider request and includes the same non-overridable identity instruction in every provider prompt. These commands use strict HTTPS validation, encoded parameters, response limits, and an eight-second timeout. If the API cannot be reached, `.search` returns a direct Google search URL, `.shorten` returns the original URL, `.fancy` returns the original plain text, `.translate` returns the original text, `.ai` suggests using search, and the media commands return the original source link. No API key is stored by the bot for these commands.
+The optional `KEITH_API_BASE_URL` setting powers `.search`, `.shorten`, `.fancy`, `.translate`, `.ai`, and the media resolvers. The AI command locally enforces the **Toosii AI / Toosii Tech** identity before any provider request and includes the same non-overridable identity instruction in every provider prompt. These commands use strict HTTPS validation, encoded parameters, response limits, and an eight-second timeout that individual callers may extend to at most thirty seconds for slower endpoints such as the dictionary and the study tutors. Because the service answers HTTP 200 even for failures, the client treats `status: false`, `success: false`, and nested failure objects as errors so multi-provider commands fall through to the next candidate. If the API cannot be reached, `.search` returns a direct Google search URL, `.shorten` returns the original URL, `.fancy` returns the original plain text, `.translate` returns the original text, `.ai` suggests using search, and the media commands return the original source link. No API key is stored by the bot for these commands.
 
 ## AI and media anti-spam protection
 

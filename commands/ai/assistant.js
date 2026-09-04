@@ -8,8 +8,12 @@ const MAX_REPLY_LENGTH = 1600;
 const IDENTITY_NAME = 'Toosii AI';
 const IDENTITY_CREATOR = 'Toosii Tech';
 const IDENTITY_RESPONSE = `${IDENTITY_NAME}\nCreated by ${IDENTITY_CREATOR}.`;
+// Ordered by measured reliability against the live service. Several documented
+// providers (gemini, deepseek, grok, qwen, metai, gpt4) currently fail upstream,
+// so the working ones are tried first and the rest remain as opportunistic fallbacks.
 const PROVIDERS = [
     { route: '/ai/gpt', parameter: 'q' },
+    { route: '/keithai', parameter: 'q' },
     { route: '/ai/gemini', parameter: 'q' },
     { route: '/ai/deepseek', parameter: 'q' }
 ];

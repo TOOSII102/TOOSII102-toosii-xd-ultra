@@ -17,6 +17,27 @@ const PLATFORM_RULES = {
     instagram: {
         pattern: /(^|\.)instagram\.com$/i,
         videoRoutes: ['/download/instadl', '/download/instagramdl']
+    },
+    facebook: {
+        pattern: /(^|\.)((facebook\.com)|(fb\.watch)|(fb\.me))$/i,
+        videoRoutes: ['/download/fbdown', '/download/fbdl']
+    },
+    twitter: {
+        pattern: /(^|\.)((twitter\.com)|(x\.com)|(t\.co))$/i,
+        videoRoutes: ['/download/twitter']
+    },
+    mediafire: {
+        pattern: /(^|\.)mediafire\.com$/i,
+        videoRoutes: ['/download/mfire']
+    },
+    soundcloud: {
+        pattern: /(^|\.)soundcloud\.com$/i,
+        audioRoutes: ['/download/soundcloud'],
+        videoRoutes: ['/download/soundcloud']
+    },
+    pinterest: {
+        pattern: /(^|\.)((pinterest\.com)|(pin\.it))$/i,
+        videoRoutes: ['/download/pindl3', '/download/pinterest', '/download/pindl2']
     }
 };
 
@@ -53,7 +74,7 @@ function findMediaUrl(value, depth = 0) {
     }
     if (typeof value !== 'object') return null;
 
-    for (const key of ['download_url', 'downloadUrl', 'url', 'video', 'play', 'link', 'media']) {
+    for (const key of ['download_url', 'downloadUrl', 'downloadLink', 'hd', 'sd', 'url', 'video', 'play', 'link', 'media', 'audio', 'thumb', 'image']) {
         const result = findMediaUrl(value[key], depth + 1);
         if (result) return result;
     }
@@ -64,10 +85,29 @@ function findMediaUrl(value, depth = 0) {
     return null;
 }
 
+// Some resolvers return titles still HTML-escaped (&#xdb4; &amp; &quot;).
+function decodeEntities(value) {
+    return value
+        .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+            const code = Number.parseInt(hex, 16);
+            return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+        })
+        .replace(/&#(\d+);/g, (_, dec) => {
+            const code = Number.parseInt(dec, 10);
+            return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+        })
+        .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+}
+
 function extractTitle(value) {
     if (!value || typeof value !== 'object') return null;
     for (const key of ['title', 'name', 'caption', 'description']) {
-        if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim().slice(0, 180);
+        if (typeof value[key] === 'string' && value[key].trim()) {
+            const decoded = decodeEntities(value[key]).replace(/\s+/g, ' ').trim();
+            if (decoded) return decoded.slice(0, 180);
+        }
     }
     for (const nested of Object.values(value)) {
         const title = extractTitle(nested);
@@ -79,7 +119,10 @@ function extractTitle(value) {
 async function resolveFromRoutes(routes, source) {
     for (const route of routes) {
         try {
-            const data = await requestJson(route, { url: source });
+            const data = await requestJson(route, { url: source }, { timeoutMs: 20000 });
+            // A few resolvers answer status:true while nesting the real failure in
+            // result.message/result.error, which would otherwise look like success.
+            if (typeof data?.result?.error === 'string' && data.result.error.trim()) continue;
             const mediaUrl = findMediaUrl(data);
             if (mediaUrl) return { mediaUrl, title: extractTitle(data), route };
         } catch {
@@ -142,6 +185,41 @@ module.exports = [
         execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'instagram', 'video')
     },
     {
+        name: 'fb',
+        aliases: ['facebook', 'fbdl'],
+        description: 'Resolve an authorized public Facebook video link.',
+        category: 'download',
+        execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'facebook', 'video')
+    },
+    {
+        name: 'twitter',
+        aliases: ['x', 'twdl'],
+        description: 'Resolve an authorized public X or Twitter video link.',
+        category: 'download',
+        execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'twitter', 'video')
+    },
+    {
+        name: 'mediafire',
+        aliases: ['mfire'],
+        description: 'Resolve a public MediaFire file link.',
+        category: 'download',
+        execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'mediafire', 'video')
+    },
+    {
+        name: 'soundcloud',
+        aliases: ['scdl'],
+        description: 'Resolve a public SoundCloud audio link.',
+        category: 'download',
+        execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'soundcloud', 'audio')
+    },
+    {
+        name: 'pinterest',
+        aliases: ['pin', 'pindl'],
+        description: 'Resolve a public Pinterest media link.',
+        category: 'download',
+        execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'pinterest', 'video')
+    },
+    {
         name: 'media',
         aliases: ['dl', 'download'],
         description: 'Resolve a supported public media link.',
@@ -151,7 +229,7 @@ module.exports = [
             try {
                 source = parseSource(args.join(' ').trim());
                 const platform = detectPlatform(source);
-                if (!platform) throw new Error('Supported sources are YouTube, TikTok, and Instagram.');
+                if (!platform) throw new Error('Supported sources are YouTube, TikTok, Instagram, Facebook, X, MediaFire, SoundCloud, and Pinterest.');
                 return handleDownload(sock, msg, ctx, [source], platform, 'video');
             } catch (error) { return reply(sock, msg, ctx, `Media error: ${error.message}`); }
         }
@@ -161,3 +239,4 @@ module.exports = [
 module.exports.resolveMedia = resolveMedia;
 module.exports.findMediaUrl = findMediaUrl;
 module.exports.detectPlatform = detectPlatform;
+module.exports.decodeEntities = decodeEntities;
