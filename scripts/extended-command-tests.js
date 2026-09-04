@@ -158,6 +158,10 @@ async function run() {
             const mediaModule = require('../commands/download/media');
             assert.strictEqual(mediaModule.decodeEntities('&#xdb4;&#xddc;&#xdad; &amp; &quot;x&quot;'), 'පොත & "x"');
 
+            // .play must accept a song name, not only a URL.
+            assert.strictEqual(mediaModule.looksLikeUrl('https://youtu.be/abc'), true);
+            assert.strictEqual(mediaModule.looksLikeUrl('alan walker faded'), false);
+
             // Newly supported download platforms must be recognised by hostname.
             assert.strictEqual(mediaModule.detectPlatform('https://www.facebook.com/share/r/abc/'), 'facebook');
             assert.strictEqual(mediaModule.detectPlatform('https://x.com/user/status/1'), 'twitter');

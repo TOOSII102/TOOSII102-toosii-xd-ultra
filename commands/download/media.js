@@ -57,6 +57,26 @@ function parseSource(value, expectedPlatform = null) {
     return url.toString();
 }
 
+// Users expect .play <song name> to work, not just .play <url>. Resolve a plain
+// search term to a YouTube video first, then hand off to the normal resolver.
+async function searchYouTube(term) {
+    const data = await requestJson('/search/yts', { query: term }, { timeoutMs: 20000 });
+    const entries = Array.isArray(data?.result) ? data.result : [];
+    const match = entries.find((entry) => typeof entry?.url === 'string' && /^https?:\/\//i.test(entry.url))
+        || entries.find((entry) => typeof entry?.id === 'string' && entry.id.trim());
+    if (!match) return null;
+    const url = match.url || `https://youtube.com/watch?v=${match.id}`;
+    return {
+        url,
+        title: typeof match.title === 'string' ? match.title.trim() : null,
+        duration: typeof match.duration === 'string' ? match.duration.trim() : null
+    };
+}
+
+function looksLikeUrl(value) {
+    return /^https?:\/\//i.test(value.trim());
+}
+
 function detectPlatform(value) {
     const url = new URL(value);
     return Object.entries(PLATFORM_RULES).find(([, rule]) => rule.pattern.test(url.hostname))?.[0] || null;
@@ -140,33 +160,54 @@ async function resolveMedia(platform, source, kind = 'video') {
 }
 
 async function handleDownload(sock, msg, ctx, args, platform, kind = 'video') {
-    let source;
-    try { source = parseSource(args.join(' ').trim(), platform); }
-    catch (error) { return reply(sock, msg, ctx, `Media error: ${error.message}`); }
+    const input = args.join(' ').trim();
+    if (!input) {
+        const usage = platform === 'youtube'
+            ? `Usage: ${ctx.prefix}${kind === 'audio' ? 'yta' : 'play'} <song name or YouTube URL>`
+            : `Usage: ${ctx.prefix}${platform} <${platform} URL>`;
+        return reply(sock, msg, ctx, usage);
+    }
 
     const limit = checkRateLimit('download', ctx.sender || ctx.from);
     if (!limit.allowed) return reply(sock, msg, ctx, `Media rate limit reached. Try again in ${limit.retryAfterSeconds} seconds.`);
 
+    let source;
+    let searched = null;
+    if (platform === 'youtube' && !looksLikeUrl(input)) {
+        try {
+            searched = await searchYouTube(input);
+        } catch (error) {
+            return reply(sock, msg, ctx, `Search failed: ${error.message}`);
+        }
+        if (!searched) return reply(sock, msg, ctx, `No YouTube result was found for "${input}".`);
+        source = searched.url;
+    } else {
+        try { source = parseSource(input, platform); }
+        catch (error) { return reply(sock, msg, ctx, `Media error: ${error.message}`); }
+    }
+
     const result = await resolveMedia(platform, source, kind);
+    const title = result?.title || searched?.title || null;
     if (result) {
         const label = `${platform} ${kind}`;
-        return reply(sock, msg, ctx, `Resolved ${label} link${result.title ? ` — ${result.title}` : ''}:\n${result.mediaUrl}\n\nOnly download or share media you are authorized to use.`);
+        const extra = searched?.duration ? `\nDuration: ${searched.duration}` : '';
+        return reply(sock, msg, ctx, `Resolved ${label} link${title ? ` — ${title}` : ''}:${extra}\n${result.mediaUrl}\n\nOnly download or share media you are authorized to use.`);
     }
-    return reply(sock, msg, ctx, `Media services are unavailable. Fallback source link:\n${source}`);
+    return reply(sock, msg, ctx, `Media services are unavailable.${title ? `\nFound: ${title}` : ''}\nFallback source link:\n${source}`);
 }
 
 module.exports = [
     {
         name: 'ytv',
         aliases: ['youtube', 'youtubevideo', 'play'],
-        description: 'Resolve an authorized YouTube video link.',
+        description: 'Play a YouTube video by name or link.',
         category: 'download',
         execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'youtube', 'video')
     },
     {
         name: 'yta',
         aliases: ['youtubeaudio', 'ytmp3'],
-        description: 'Resolve an authorized YouTube audio link.',
+        description: 'Play YouTube audio by name or link.',
         category: 'download',
         execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'youtube', 'audio')
     },
@@ -240,3 +281,5 @@ module.exports.resolveMedia = resolveMedia;
 module.exports.findMediaUrl = findMediaUrl;
 module.exports.detectPlatform = detectPlatform;
 module.exports.decodeEntities = decodeEntities;
+module.exports.searchYouTube = searchYouTube;
+module.exports.looksLikeUrl = looksLikeUrl;
