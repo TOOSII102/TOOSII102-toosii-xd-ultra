@@ -1,0 +1,32 @@
+{
+  "name": "TOOSII-XD-ULTRA",
+  "description": "TOOSII-XD-ULTRA — Baileys WhatsApp bot with prefix commands",
+  "repository": "https://github.com/TOOSII102/TOOSII102-toosii-xd-ultra",
+  "keywords": ["whatsapp", "baileys", "bot", "nodejs"],
+  "stack": "container",
+  "env": {
+    "SESSION_ID": {
+      "description": "Your bot session ID. Leave empty to link with a pairing code.",
+      "required": false
+    },
+    "OWNER_NUMBER": {
+      "description": "Owner number in international format, no plus sign (e.g. 254712345678).",
+      "required": true
+    },
+    "PREFIX": {
+      "description": "Command prefix.",
+      "value": "."
+    },
+    "BOT_NAME": {
+      "description": "Display name of the bot.",
+      "value": "TOOSII-XD-ULTRA"
+    },
+    "RATE_LIMIT_ENABLED": {
+      "description": "Persistent per-user anti-spam limits.",
+      "value": "true"
+    }
+  },
+  "formation": {
+    "worker": { "quantity": 1, "size": "eco" }
+  }
+}

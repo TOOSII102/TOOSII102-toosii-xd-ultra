@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "TOOSII-XD-ULTRA — Baileys WhatsApp bot with prefix commands",
   "main": "index.js",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "start": "node index.js",
     "check": "node scripts/validate.js",
