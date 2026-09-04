@@ -176,6 +176,31 @@ async function run() {
             assert.ok(tutorCalls.some((u) => u.includes('/education/maths')), 'the dedicated endpoint is tried first');
             assert.ok(tutorCalls.some((u) => u.includes('/ai/gpt')), 'the AI fallback is used when the tutor is empty');
 
+            // Regression: .lyrics and .news must fall through when a source is down.
+            const savedFetch3 = global.fetch;
+            const routesTried = [];
+            global.fetch = async (url) => {
+                const href = String(url);
+                routesTried.push(href);
+                if (href.includes('/search/lyrics?') || href.includes('/news/bbc')) {
+                    return { ok: true, status: 200, json: async () => ({ status: false, error: 'simulated outage' }) };
+                }
+                if (href.includes('/search/lyrics2')) {
+                    return { ok: true, status: 200, json: async () => ({ status: true, result: 'Fallback lyric line one.' }) };
+                }
+                if (href.includes('/news/citizen')) {
+                    return { ok: true, status: 200, json: async () => ({ status: true, result: { topStories: [{ title: 'A sufficiently long fallback headline', url: 'https://example.com/a' }] } }) };
+                }
+                return { ok: true, status: 200, json: async () => ({ status: true, result: {} }) };
+            };
+            const lyricsReply = await execute(commands, 'lyrics', basicSock, ['faded'], ctx);
+            const newsReply = await execute(commands, 'news', basicSock, [], ctx);
+            global.fetch = savedFetch3;
+            assert.match(lyricsReply, /Fallback lyric line one/, '.lyrics must fall through to the next variant');
+            assert.ok(routesTried.some((u) => u.includes('/search/lyrics2')), 'the lyrics fallback route is used');
+            assert.match(newsReply, /A sufficiently long fallback headline/, '.news must fall through to the next source');
+            assert.match(newsReply, /Citizen Digital/, 'the reply names the source that answered');
+
             // .play must accept a song name, not only a URL.
             assert.strictEqual(mediaModule.looksLikeUrl('https://youtu.be/abc'), true);
             assert.strictEqual(mediaModule.looksLikeUrl('alan walker faded'), false);

@@ -144,7 +144,7 @@ function extractTitle(value) {
 async function resolveFromRoutes(routes, source) {
     for (const route of routes) {
         try {
-            const data = await requestJson(route, { url: source }, { timeoutMs: 20000 });
+            const data = await requestJson(route, { url: source }, { timeoutMs: 30000 });
             // A few resolvers answer status:true while nesting the real failure in
             // result.message/result.error, which would otherwise look like success.
             if (typeof data?.result?.error === 'string' && data.result.error.trim()) continue;

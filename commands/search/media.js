@@ -16,6 +16,49 @@ function getQuery(args, usage) {
     return value;
 }
 
+
+const LYRIC_ROUTES = ['/search/lyrics', '/search/lyrics2', '/search/lyrics3'];
+const NEWS_SOURCES = [
+    { route: '/news/bbc', label: 'BBC' },
+    { route: '/news/citizen', label: 'Citizen Digital' },
+    { route: '/news/kbc', label: 'KBC' },
+    { route: '/news/tech', label: 'Technology' }
+];
+
+// Try each route in turn, returning the first one the extractor accepts.
+async function firstResult(routes, query, extract) {
+    for (const route of routes) {
+        try {
+            const data = await requestJson(route, { query, q: query }, { timeoutMs: 15000 });
+            const value = extract(data?.result, route);
+            if (value) return value;
+        } catch {
+            // Try the next variant.
+        }
+    }
+    return null;
+}
+
+// News payloads nest stories under different keys per source, so accept any
+// array whose entries carry a usable title.
+function collectHeadlines(result) {
+    if (!result || typeof result !== 'object') return [];
+    const stories = [];
+    for (const value of Object.values(result)) {
+        if (!Array.isArray(value)) continue;
+        for (const entry of value) {
+            const title = typeof entry?.title === 'string' ? entry.title.trim()
+                : typeof entry?.headline === 'string' ? entry.headline.trim()
+                : typeof entry?.text === 'string' ? entry.text.trim() : '';
+            if (!title || title.length < 12) continue;
+            const url = typeof entry?.url === 'string' ? entry.url
+                : typeof entry?.link === 'string' ? entry.link : null;
+            if (!stories.some((story) => story.title === title)) stories.push({ title, url });
+        }
+    }
+    return stories;
+}
+
 function command(name, aliases, description, execute) {
     return { name, aliases, description, category: 'search', execute };
 }
@@ -36,20 +79,25 @@ module.exports = [
             return reply(sock, msg, ctx, `Lyrics error: ${failure(error)}`);
         }
 
-        try {
-            const data = await requestJson('/search/lyrics', { query });
-            const entries = Array.isArray(data?.result) ? data.result : [];
-            const song = entries.find((entry) => typeof entry?.lyrics === 'string' && entry.lyrics.trim());
-            if (!song) return reply(sock, msg, ctx, `No lyrics were found for "${query}".`);
+        // Three upstream variants exist and fail independently. The first returns a
+        // list of matches, the others return the lyrics as a bare string.
+        const found = await firstResult(LYRIC_ROUTES, query, (result, route) => {
+            if (Array.isArray(result)) {
+                const song = result.find((entry) => typeof entry?.lyrics === 'string' && entry.lyrics.trim());
+                return song ? { title: song.song || query, artist: song.artist || null, body: song.lyrics.trim() } : null;
+            }
+            if (typeof result === 'string' && result.trim()) {
+                return { title: query, artist: null, body: result.trim() };
+            }
+            return null;
+        });
 
-            const header = `${song.song || query}${song.artist ? ` — ${song.artist}` : ''}`;
-            const body = song.lyrics.trim();
-            const budget = MAX_REPLY_LENGTH - header.length - 40;
-            const truncated = body.length > budget;
-            return reply(sock, msg, ctx, `${header}\n\n${body.slice(0, budget)}${truncated ? '\n\n[Lyrics truncated.]' : ''}`);
-        } catch (error) {
-            return reply(sock, msg, ctx, `Lyrics lookup failed: ${failure(error)}`);
-        }
+        if (!found) return reply(sock, msg, ctx, `No lyrics were found for "${query}".`);
+
+        const header = `${found.title}${found.artist ? ` — ${found.artist}` : ''}`;
+        const budget = MAX_REPLY_LENGTH - header.length - 40;
+        const truncated = found.body.length > budget;
+        return reply(sock, msg, ctx, `${header}\n\n${found.body.slice(0, budget)}${truncated ? '\n\n[Lyrics truncated.]' : ''}`);
     }),
 
     command('verse', ['bibleverse', 'scripture'], 'Look up a Bible passage by reference.', async (sock, msg, args, ctx) => {
@@ -99,18 +147,21 @@ module.exports = [
     }),
 
     command('news', ['headlines'], 'Show current BBC world headlines.', async (sock, msg, args, ctx) => {
-        try {
-            const data = await requestJson('/news/bbc');
-            const stories = data?.result?.topStories;
-            if (!Array.isArray(stories) || !stories.length) throw new Error('No headlines were returned.');
-            const lines = stories
-                .filter((story) => typeof story?.title === 'string' && story.title.trim())
-                .slice(0, 6)
-                .map((story, index) => `${index + 1}. ${story.title.trim()}${story.url ? `\n   ${story.url}` : ''}`);
-            if (!lines.length) throw new Error('No headlines were returned.');
-            return reply(sock, msg, ctx, `BBC headlines\n\n${lines.join('\n')}`.slice(0, MAX_REPLY_LENGTH));
-        } catch (error) {
-            return reply(sock, msg, ctx, `News lookup failed: ${failure(error)}`);
+        // Each source nests its stories under a different key, so collect from any
+        // array of story-like objects and move on to the next source if empty.
+        for (const source of NEWS_SOURCES) {
+            let data;
+            try {
+                data = await requestJson(source.route, {}, { timeoutMs: 15000 });
+            } catch {
+                continue;
+            }
+            const lines = collectHeadlines(data?.result).slice(0, 6)
+                .map((story, index) => `${index + 1}. ${story.title}${story.url ? `\n   ${story.url}` : ''}`);
+            if (lines.length) {
+                return reply(sock, msg, ctx, `${source.label} headlines\n\n${lines.join('\n')}`.slice(0, MAX_REPLY_LENGTH));
+            }
         }
+        return reply(sock, msg, ctx, 'News is unavailable right now. Please try again shortly.');
     })
 ];
