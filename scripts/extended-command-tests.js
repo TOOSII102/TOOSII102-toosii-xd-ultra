@@ -105,7 +105,15 @@ async function run() {
             if (source.includes('/download/audio')) return { ok: true, status: 200, json: async () => ({ result: { download_url: 'https://cdn.example/audio.mp3', title: 'Test YouTube Audio' } }) };
             if (source.includes('tiktokdl3')) return { ok: true, status: 200, json: async () => ({ status: true, result: 'https://cdn.example/tiktok.mp4' }) };
             if (source.includes('instadl')) return { ok: true, status: 200, json: async () => ({ result: { video: 'https://cdn.example/instagram.mp4', title: 'Test Instagram Video' } }) };
-            if (source.includes('restcountries')) return { ok: true, status: 200, json: async () => ([{ name: { common: 'Kenya' }, capital: ['Nairobi'], region: 'Africa', population: 50000000, languages: { eng: 'English' } }]) };
+            if (source.includes('api.worldbank.org') && source.includes('SP.POP.TOTL')) {
+                return { ok: true, status: 200, json: async () => ([{ page: 1 }, [{ date: '2025', value: 50000000 }]]) };
+            }
+            if (source.includes('api.worldbank.org')) {
+                return { ok: true, status: 200, json: async () => ([{ page: 1 }, [
+                    { id: 'KEN', iso2Code: 'KE', name: 'Kenya', capitalCity: 'Nairobi', region: { value: 'Sub-Saharan Africa ' }, incomeLevel: { value: 'Lower middle income' } },
+                    { id: 'ARB', iso2Code: '1A', name: 'Arab World', capitalCity: '', region: { value: 'Aggregates' }, incomeLevel: { value: 'Aggregates' } }
+                ]]) };
+            }
             if (source.includes('/users/')) return { ok: true, status: 200, json: async () => ({ login: 'octocat', name: 'The Octocat', public_repos: 8, followers: 10, html_url: 'https://github.com/octocat' }) };
             if (source.includes('/repos/')) return { ok: true, status: 200, json: async () => ({ full_name: 'octocat/Hello-World', description: 'Test repository', stargazers_count: 5, language: 'JavaScript', html_url: 'https://github.com/octocat/Hello-World' }) };
             if (source.includes('shortener')) return { ok: true, status: 200, json: async () => ({ status: true, result: { shortened: 'https://tinyurl.com/test' } }) };
@@ -115,7 +123,12 @@ async function run() {
             return { ok: true, status: 200, json: async () => ({ meals: [{ strMeal: 'Test Meal', strCategory: 'Test', strArea: 'Global', strInstructions: 'Mix and serve.' }] }) };
         };
         try {
-            assert.match(await execute(commands, 'country', basicSock, ['Kenya'], ctx), /Country: Kenya/);
+            const countryReply = await execute(commands, 'country', basicSock, ['Kenya'], ctx);
+            assert.match(countryReply, /Country: Kenya/);
+            assert.match(countryReply, /Capital: Nairobi/);
+            assert.match(countryReply, /Population: 50,000,000 \(2025\)/);
+            // Aggregate rows have no capital city and must never match a lookup.
+            assert.match(await execute(commands, 'country', basicSock, ['Arab World'], ctx), /No country named/);
             assert.match(await execute(commands, 'github', basicSock, ['octocat'], ctx), /GitHub: octocat/);
             assert.match(await execute(commands, 'ghrepo', basicSock, ['octocat/Hello-World'], ctx), /Repository: octocat\/Hello-World/);
             assert.match(await execute(commands, 'recipe', basicSock, ['meal'], ctx), /Recipe: Test Meal/);
@@ -123,6 +136,24 @@ async function run() {
             assert.strictEqual(await execute(commands, 'fancy', basicSock, ['3', 'hello'], ctx), '𝐡𝐞𝐥𝐥𝐨');
             assert.match(await execute(commands, 'translate', basicSock, ['fr', 'hello'], ctx), /Bonjour/);
             assert.match(await execute(commands, 'search', basicSock, ['example'], ctx), /Example search result/);
+
+            // Regression: the upstream service answers HTTP 200 with status:false on
+            // provider failure. requestJson must surface that as an error so callers
+            // fall through to the next provider instead of relaying an empty success.
+            const { requestJson } = require('../lib/keithApi');
+            const savedFetch = global.fetch;
+            global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ status: false, creator: 'Keithkeizzah', error: 'Failed to retrieve UUID register from HTML.' }) });
+            await assert.rejects(() => requestJson('/ai/gemini', { q: 'hi' }), /Failed to retrieve UUID register/);
+            global.fetch = savedFetch;
+
+            // Regression: providers ignore the identity contract and name themselves.
+            const assistant = require('../commands/ai/assistant');
+            const leaked = assistant.extractText({ status: true, result: "Hello! I am UnlimitedAI.Chat, created by the UnlimitedAI.Chat team. I'm here to help." });
+            assert.doesNotMatch(leaked, /UnlimitedAI/);
+            assert.match(leaked, /I am Toosii AI, created by Toosii Tech\./);
+            assert.match(leaked, /I'm here to help\./);
+            // Ordinary capitalised prose must survive untouched.
+            assert.strictEqual(assistant.extractText({ result: 'Mount Kenya is in Africa.' }), 'Mount Kenya is in Africa.');
             assert.match(await execute(commands, 'ai', basicSock, ['hello'], ctx), /Toosii AI\nCreated by Toosii Tech\.\n\nAI test response/);
             assert.match(await execute(commands, 'ytv', basicSock, ['https://www.youtube.com/watch?v=BaW_jenozKc'], ctx), /https:\/\/cdn.example\/video.mp4/);
             assert.match(await execute(commands, 'yta', basicSock, ['https://www.youtube.com/watch?v=BaW_jenozKc'], ctx), /https:\/\/cdn.example\/audio.mp3/);

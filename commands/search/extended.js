@@ -24,6 +24,39 @@ function serviceError(error) {
     return error?.name === 'TimeoutError' ? 'request timed out.' : error.message;
 }
 
+// restcountries v1-v4 were shut down and v5 requires a paid API key, so country
+// lookups use the World Bank country API, which stays keyless and CORS-open.
+const WORLD_BANK_BASE = 'https://api.worldbank.org/v2';
+let countryCache = null;
+
+async function loadCountries() {
+    if (countryCache) return countryCache;
+    const payload = await fetchJson(`${WORLD_BANK_BASE}/country?format=json&per_page=400`);
+    const rows = Array.isArray(payload) && Array.isArray(payload[1]) ? payload[1] : [];
+    // Aggregates (regions, income groups) carry an empty capitalCity; drop them.
+    countryCache = rows.filter((row) => row?.capitalCity && row.capitalCity.trim());
+    return countryCache;
+}
+
+function matchCountry(rows, value) {
+    const needle = value.trim().toLowerCase();
+    return rows.find((row) => row.name.toLowerCase() === needle)
+        || rows.find((row) => row.iso2Code.toLowerCase() === needle)
+        || rows.find((row) => row.id.toLowerCase() === needle)
+        || rows.find((row) => row.name.toLowerCase().includes(needle))
+        || null;
+}
+
+async function fetchPopulation(iso3) {
+    try {
+        const payload = await fetchJson(`${WORLD_BANK_BASE}/country/${encodeURIComponent(iso3)}/indicator/SP.POP.TOTL?format=json&per_page=1&mrnev=1`);
+        const entry = Array.isArray(payload) && Array.isArray(payload[1]) ? payload[1][0] : null;
+        return entry && typeof entry.value === 'number' ? { value: entry.value, year: entry.date } : null;
+    } catch {
+        return null;
+    }
+}
+
 function command(name, aliases, description, execute) {
     return { name, aliases, description, category: 'search', execute };
 }
@@ -32,11 +65,14 @@ module.exports = [
     command('country', ['countryinfo'], 'Look up public country information.', async (sock, msg, args, ctx) => {
         try {
             const value = query(args, `${ctx.prefix}country <country name>`);
-            const result = await fetchJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(value)}?fullText=true`);
-            const country = Array.isArray(result) ? result[0] : null;
+            const rows = await loadCountries();
+            const country = matchCountry(rows, value);
             if (!country) return reply(sock, msg, ctx, `No country named "${value}" was found.`);
-            const languages = Object.values(country.languages || {}).join(', ') || 'Not listed';
-            return reply(sock, msg, ctx, `Country: ${country.name?.common || value}\nCapital: ${(country.capital || ['Not listed']).join(', ')}\nRegion: ${country.region || 'Not listed'}\nPopulation: ${(country.population || 0).toLocaleString()}\nLanguages: ${languages}`);
+            const population = await fetchPopulation(country.id);
+            const populationLine = population
+                ? `${population.value.toLocaleString()} (${population.year})`
+                : 'Not listed';
+            return reply(sock, msg, ctx, `Country: ${country.name}\nCapital: ${country.capitalCity || 'Not listed'}\nRegion: ${(country.region?.value || 'Not listed').trim()}\nIncome level: ${(country.incomeLevel?.value || 'Not listed').trim()}\nPopulation: ${populationLine}\nCode: ${country.iso2Code} / ${country.id}`);
         } catch (error) { return reply(sock, msg, ctx, `Country lookup failed: ${serviceError(error)}`); }
     }),
     command('github', ['ghuser'], 'Look up a public GitHub user profile.', async (sock, msg, args, ctx) => {

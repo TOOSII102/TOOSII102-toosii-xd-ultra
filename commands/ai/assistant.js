@@ -39,6 +39,34 @@ function buildProviderPrompt(prompt) {
     ].join('\n');
 }
 
+// Upstream providers routinely ignore the identity contract and introduce themselves
+// with their own vendor name. Rewrite those self-references instead of relaying them.
+const IDENTITY_STOPWORDS = new Set([
+    'here', 'happy', 'glad', 'sorry', 'ready', 'able', 'unable', 'not', 'just',
+    'an', 'a', 'the', 'your', 'you', 'doing', 'going', 'sure', 'afraid', 'only'
+]);
+
+// Upstream providers routinely ignore the identity contract and introduce themselves
+// with their own vendor name. Rewrite those self-references instead of relaying them.
+// Patterns stay case-sensitive so an actual capitalised product name is required.
+const FOREIGN_IDENTITY_PATTERNS = [
+    { re: /\b(?:I am|I'm|This is)\s+([A-Z][\w-]*(?:\.[A-Za-z][\w-]*)*(?:\s+[A-Z][\w-]*(?:\.[A-Za-z][\w-]*)*){0,3})/g, kind: 'name' },
+    { re: /\b(?:created|developed|built|made|trained)\s+by(?:\s+the)?\s+([A-Z][\w-]*(?:\.[A-Za-z][\w-]*)*(?:\s+[A-Z][\w-]*(?:\.[A-Za-z][\w-]*)*){0,3}(?:\s+(?:team|company|labs?))?)/g, kind: 'creator' }
+];
+
+function stripForeignIdentity(text) {
+    let cleaned = text;
+    for (const { re, kind } of FOREIGN_IDENTITY_PATTERNS) {
+        cleaned = cleaned.replace(re, (match, captured) => {
+            const head = String(captured).split(/[\s.]/)[0].toLowerCase();
+            if (IDENTITY_STOPWORDS.has(head)) return match;
+            if (head === 'toosii') return match;
+            return kind === 'creator' ? `created by ${IDENTITY_CREATOR}` : `I am ${IDENTITY_NAME}`;
+        });
+    }
+    return cleaned.replace(/[ \t]{2,}/g, ' ').trim();
+}
+
 function extractText(data) {
     const candidates = [
         data?.result,
@@ -48,7 +76,9 @@ function extractText(data) {
         data?.data?.response
     ];
     const value = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
-    return value ? value.trim().slice(0, MAX_REPLY_LENGTH) : null;
+    if (!value) return null;
+    const sanitized = stripForeignIdentity(value.trim());
+    return sanitized ? sanitized.slice(0, MAX_REPLY_LENGTH) : null;
 }
 
 async function askProvider(prompt) {
@@ -97,6 +127,7 @@ module.exports = {
     attemptsIdentityOverride,
     buildProviderPrompt,
     formatAnswer,
+    stripForeignIdentity,
     IDENTITY_NAME,
     IDENTITY_CREATOR
 };
