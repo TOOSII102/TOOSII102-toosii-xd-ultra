@@ -140,15 +140,15 @@ async function run() {
             // Regression: the upstream service answers HTTP 200 with status:false on
             // provider failure. requestJson must surface that as an error so callers
             // fall through to the next provider instead of relaying an empty success.
-            const { requestJson } = require('../lib/keithApi');
+            const { requestJson } = require('../lib/toosiiApi');
             const savedFetch = global.fetch;
-            global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ status: false, creator: 'Keithkeizzah', error: 'Failed to retrieve UUID register from HTML.' }) });
+            global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ status: false, error: 'Failed to retrieve UUID register from HTML.' }) });
             await assert.rejects(() => requestJson('/ai/gemini', { q: 'hi' }), /Failed to retrieve UUID register/);
             global.fetch = savedFetch;
 
             // Regression: failure shapes beyond { status:false }. The service also uses
             // { success:false } and nests failures under result, all behind HTTP 200.
-            const { assertPayloadSucceeded } = require('../lib/keithApi');
+            const { assertPayloadSucceeded } = require('../lib/toosiiApi');
             assert.throws(() => assertPayloadSucceeded({ success: false, message: 'SoundCloud failed' }), /SoundCloud failed/);
             assert.throws(() => assertPayloadSucceeded({ status: false }), /failed request/);
             assert.doesNotThrow(() => assertPayloadSucceeded({ status: true, result: 'fine' }));
@@ -164,6 +164,20 @@ async function run() {
             assert.strictEqual(mediaModule.detectPlatform('https://pin.it/abc'), 'pinterest');
             assert.strictEqual(mediaModule.detectPlatform('https://www.mediafire.com/file/a/b/file'), 'mediafire');
             assert.strictEqual(mediaModule.detectPlatform('https://example.com/video'), null);
+
+            // Regression: no upstream vendor branding may reach a user.
+            const { scrubVendor } = require('../lib/toosiiApi');
+            assert.strictEqual(scrubVendor('Keithkeizzah'), 'Toosii');
+            assert.strictEqual(scrubVendor('apiskeith2 failed'), 'Toosii failed');
+            assert.strictEqual(scrubVendor('KeithAI error'), 'Toosii error');
+            assert.doesNotMatch(scrubVendor('the keithapi is down'), /keith/i);
+            assert.strictEqual(scrubVendor('Failed to download'), 'Failed to download');
+
+            // An AI reply naming the upstream vendor must present as Toosii AI.
+            const assistantModule = require('../commands/ai/assistant');
+            const vendorReply = assistantModule.extractText({ result: 'I am KeithAI, created by Keithkeizzah.' });
+            assert.doesNotMatch(vendorReply, /keith/i);
+            assert.strictEqual(vendorReply, 'I am Toosii AI, created by Toosii Tech.');
 
             // Regression: providers ignore the identity contract and name themselves.
             const assistant = require('../commands/ai/assistant');

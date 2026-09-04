@@ -1,6 +1,6 @@
 'use strict';
 
-const { requestJson } = require('../../lib/keithApi');
+const { requestJson } = require('../../lib/toosiiApi');
 
 const MAX_QUERY_LENGTH = 80;
 const MAX_REPLY_LENGTH = 1500;

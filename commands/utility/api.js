@@ -1,6 +1,6 @@
 'use strict';
 
-const { requestJson } = require('../../lib/keithApi');
+const { requestJson } = require('../../lib/toosiiApi');
 
 const MAX_TEXT_LENGTH = 600;
 

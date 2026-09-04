@@ -1,6 +1,6 @@
 'use strict';
 
-const { requestJson } = require('../../lib/keithApi');
+const { requestJson, scrubVendor } = require('../../lib/toosiiApi');
 const { checkRateLimit } = require('../../lib/rateLimiter');
 
 const MAX_PROMPT_LENGTH = 700;
@@ -13,7 +13,7 @@ const IDENTITY_RESPONSE = `${IDENTITY_NAME}\nCreated by ${IDENTITY_CREATOR}.`;
 // so the working ones are tried first and the rest remain as opportunistic fallbacks.
 const PROVIDERS = [
     { route: '/ai/gpt', parameter: 'q' },
-    { route: '/keithai', parameter: 'q' },
+    { route: '/keithai', parameter: 'q' }, // upstream route name; never shown to users
     { route: '/ai/gemini', parameter: 'q' },
     { route: '/ai/deepseek', parameter: 'q' }
 ];
@@ -68,6 +68,11 @@ function stripForeignIdentity(text) {
             return kind === 'creator' ? `created by ${IDENTITY_CREATOR}` : `I am ${IDENTITY_NAME}`;
         });
     }
+    // Normalise bare "Toosii" left behind by vendor scrubbing into the full identity.
+    cleaned = cleaned
+        .replace(/\b(I am|I'm|This is)\s+Toosii\b(?!\s+AI)/gi, (_, lead) => `${lead} ${IDENTITY_NAME}`)
+        .replace(/\b(created|developed|built|made|trained)\s+by(?:\s+the)?\s+Toosii\b(?!\s+Tech)/gi, (_, verb) => `${verb} by ${IDENTITY_CREATOR}`)
+        .replace(/\b(my\s+(?:creator|developer|owner)\s+is)\s+Toosii\b(?!\s+Tech)/gi, (_, lead) => `${lead} ${IDENTITY_CREATOR}`);
     return cleaned.replace(/[ \t]{2,}/g, ' ').trim();
 }
 
@@ -81,7 +86,9 @@ function extractText(data) {
     ];
     const value = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
     if (!value) return null;
-    const sanitized = stripForeignIdentity(value.trim());
+    // Scrub the upstream vendor name first, then rewrite any remaining foreign
+    // self-identification, so a provider can never introduce itself as Keith.
+    const sanitized = stripForeignIdentity(scrubVendor(value.trim()));
     return sanitized ? sanitized.slice(0, MAX_REPLY_LENGTH) : null;
 }
 

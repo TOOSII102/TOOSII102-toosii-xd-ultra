@@ -1,6 +1,6 @@
 'use strict';
 
-const { requestJson } = require('../../lib/keithApi');
+const { requestJson } = require('../../lib/toosiiApi');
 const { checkRateLimit } = require('../../lib/rateLimiter');
 
 const MAX_QUESTION_LENGTH = 400;

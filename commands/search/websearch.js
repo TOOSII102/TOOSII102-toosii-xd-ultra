@@ -1,6 +1,6 @@
 'use strict';
 
-const { requestJson } = require('../../lib/keithApi');
+const { requestJson } = require('../../lib/toosiiApi');
 
 const MAX_QUERY_LENGTH = 100;
 const BLOCKED_TERMS = ['porn', 'hentai', 'xnxx', 'xvideos', 'onlyfans', 'nude', 'nsfw'];

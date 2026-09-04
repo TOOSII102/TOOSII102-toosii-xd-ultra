@@ -1,6 +1,6 @@
 'use strict';
 
-const { requestJson } = require('../../lib/keithApi');
+const { requestJson } = require('../../lib/toosiiApi');
 
 function reply(sock, msg, ctx, text) {
     return sock.sendMessage(ctx.from, { text }, { quoted: msg });
