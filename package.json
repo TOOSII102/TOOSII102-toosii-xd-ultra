@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node index.js",
     "check": "node scripts/validate.js",
-    "test": "node scripts/command-tests.js && node scripts/extended-command-tests.js && node scripts/rate-limit-tests.js && node scripts/owner-authorization-tests.js"
+    "test": "node scripts/command-tests.js && node scripts/extended-command-tests.js && node scripts/rate-limit-tests.js && node scripts/owner-authorization-tests.js && node scripts/resilience-tests.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

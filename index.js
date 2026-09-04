@@ -24,6 +24,20 @@ function debug(message) {
     if (DEBUG_LOGS) console.log(chalk.gray(message));
 }
 
+// Sending can reject on its own (rate limits, closed socket, blocked contact).
+// Swallow that so a failed reply never takes the connection down with it.
+async function safeSend(sock, jid, text, quoted) {
+    try {
+        await sock.sendMessage(jid, { text }, quoted ? { quoted } : undefined);
+        return true;
+    } catch (error) {
+        console.error(chalk.red('[Send] Could not deliver a reply:'), error?.message || error);
+        return false;
+    }
+}
+
+let reconnectAttempts = 0;
+
 const PLACEHOLDER_NUMBER = '254700000000';
 const PLACEHOLDER_SESSION_MARKER = 'PASTE_YOUR_SESSION_STRING_HERE';
 
@@ -31,6 +45,16 @@ function ask(question) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     return new Promise(resolve => rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); }));
 }
+
+// A bot serving the public must never die from one bad message. Baileys emits
+// events without awaiting the handler, so any rejection that escapes would
+// otherwise terminate the process on Node 18+.
+process.on('unhandledRejection', (reason) => {
+    console.error(chalk.red('[Guard] Unhandled rejection (ignored, bot stays online):'), reason);
+});
+process.on('uncaughtException', (error) => {
+    console.error(chalk.red('[Guard] Uncaught exception (ignored, bot stays online):'), error);
+});
 
 async function start() {
     loadSessionFromId();
@@ -122,6 +146,7 @@ async function start() {
         const { connection, lastDisconnect } = update;
 
         if (connection === 'open') {
+            reconnectAttempts = 0;
             setRuntimeOwner(sock.user);
             console.log(chalk.green(`[${BOT_NAME}] Connected.`));
             console.log(chalk.cyan(`[${BOT_NAME}] Loaded ${commands.catalog.length} commands across ${new Set(commands.catalog.map((command) => command.category)).size} categories.`));
@@ -133,7 +158,23 @@ async function start() {
             const errorMsg = lastDisconnect?.error?.message || 'no message';
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             console.log(chalk.red(`[${BOT_NAME}] Connection closed. Status: ${statusCode}, Reason: ${errorMsg}, Reconnect: ${shouldReconnect}`));
-            if (shouldReconnect) start();
+
+            if (!shouldReconnect) {
+                console.log(chalk.yellow(`[${BOT_NAME}] The device was unlinked from WhatsApp. Delete ./session and link again.`));
+                return;
+            }
+
+            // Back off between attempts. Reconnecting in a tight loop is what gets
+            // an account rate-limited or banned, and start() returns a promise, so
+            // it must be caught or a failed retry would terminate the process.
+            reconnectAttempts += 1;
+            const delay = Math.min(2000 * (2 ** (reconnectAttempts - 1)), 60000);
+            console.log(chalk.yellow(`[${BOT_NAME}] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}).`));
+            setTimeout(() => {
+                start().catch((error) => {
+                    console.error(chalk.red(`[${BOT_NAME}] Reconnect attempt failed:`), error?.message || error);
+                });
+            }, delay);
         }
     });
 
@@ -146,6 +187,7 @@ async function start() {
         debug(`[Debug] messages.upsert fired — count: ${messages.length}`);
 
         for (const msg of messages) {
+          try {
             const senderJid = msg.key.remoteJid;
             const participant = msg.key.participant || senderJid;
 
@@ -183,7 +225,8 @@ async function start() {
             }
 
             const args = body.slice(PREFIX.length).trim().split(/\s+/);
-            const cmdName = args.shift().toLowerCase();
+            const cmdName = (args.shift() || '').toLowerCase();
+            if (!cmdName) continue; // a bare prefix is not a command
             const command = commands.get(cmdName);
 
             if (!command) {
@@ -208,7 +251,7 @@ async function start() {
             };
 
             if (!access.allowed) {
-                await sock.sendMessage(ctx.from, { text: access.reason }, { quoted: msg });
+                await safeSend(sock, ctx.from, access.reason, msg);
                 continue;
             }
 
@@ -216,8 +259,13 @@ async function start() {
                 await command.execute(sock, msg, args, ctx);
             } catch (err) {
                 console.error(chalk.red(`[Commands] Error running "${cmdName}":`), err);
-                await sock.sendMessage(ctx.from, { text: `⚠️ Error running .${cmdName}: ${err.message}` }, { quoted: msg });
+                // Report the failure without leaking internals to the chat.
+                await safeSend(sock, ctx.from, `⚠️ That command failed. Please try again.`, msg);
             }
+          } catch (err) {
+            // One malformed message must never stop the remaining ones.
+            console.error(chalk.red('[Handler] Skipped a message after an error:'), err?.message || err);
+          }
         }
     });
 }
