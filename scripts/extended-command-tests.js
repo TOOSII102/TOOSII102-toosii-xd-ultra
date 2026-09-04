@@ -358,3 +358,33 @@ testAudioDelivery().catch((error) => {
     console.error(error);
     process.exit(1);
 });
+
+// --- retry message store ---------------------------------------------------
+// When a recipient's device cannot decrypt a message, WhatsApp asks us to
+// resend the original. Baileys fetches it via getMessage. Returning a stub made
+// resends arrive empty, so replies never showed up on other people's phones.
+{
+    const store = require('../lib/messageStore');
+    store.clear();
+
+    store.remember({ id: 'MSG1' }, { conversation: 'hello' });
+    assert.deepStrictEqual(store.recall({ id: 'MSG1' }), { conversation: 'hello' },
+        'a stored message must be returned verbatim for a retry');
+    assert.strictEqual(store.recall({ id: 'UNKNOWN' }), null, 'an unknown key must return null, never a stub');
+    assert.strictEqual(store.recall(null), null, 'a missing key must not throw');
+    store.remember(null, { conversation: 'x' });
+    store.remember({ id: 'MSG2' }, null);
+    assert.strictEqual(store.recall({ id: 'MSG2' }), null, 'an empty message must not be stored');
+
+    // Unbounded growth would leak memory on a long-running public bot.
+    for (let i = 0; i < store.MAX_ENTRIES + 200; i += 1) {
+        store.remember({ id: `bulk-${i}` }, { conversation: `body-${i}` });
+    }
+    assert.strictEqual(store.size(), store.MAX_ENTRIES, 'the store must stay bounded');
+    assert.strictEqual(store.recall({ id: 'bulk-0' }), null, 'the oldest entry must be evicted first');
+    assert.deepStrictEqual(store.recall({ id: `bulk-${store.MAX_ENTRIES + 199}` }),
+        { conversation: `body-${store.MAX_ENTRIES + 199}` }, 'the newest entry must be retained');
+    store.clear();
+
+    console.log('Retry store tests passed: sent messages are recalled for resends and the store stays bounded.');
+}

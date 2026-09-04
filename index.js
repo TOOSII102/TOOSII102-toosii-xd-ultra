@@ -14,6 +14,7 @@ const { PREFIX, BOT_NAME, OWNER_NUMBER, SESSION_ID } = require('./config');
 const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 const { isOwnerMessage, setRuntimeOwner } = require('./middleware/ownerOnly');
+const messageStore = require('./lib/messageStore');
 const { getBotMode } = require('./lib/botMode');
 const { getCommandAccess } = require('./lib/commandAccess');
 
@@ -122,10 +123,10 @@ async function start() {
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         retryRequestDelayMs: 1000,
-        // Baileys asks for the original message when it has to resend one. With no
-        // store configured this must still return an object, or the retry throws
-        // and takes the connection down with it.
-        getMessage: async () => ({ conversation: '' })
+        // Baileys asks for the original when a recipient could not decrypt one of
+        // our messages. Returning a stub makes the resend arrive empty, so the
+        // other device never sees the reply. Serve the real message instead.
+        getMessage: async (key) => messageStore.recall(key) || undefined
     });
 
     // Capture both phone-JID and LID identities supplied by Baileys. This is
@@ -152,6 +153,14 @@ async function start() {
     // 📡 EVENT HANDLERS
     // ==============================================
     sock.ev.on('creds.update', saveCreds);
+
+    // Keep a copy of everything we send. WhatsApp asks for the original when a
+    // recipient's device fails to decrypt it and requests a resend.
+    sock.ev.on('messages.upsert', ({ messages }) => {
+        for (const msg of messages || []) {
+            if (msg?.key?.fromMe && msg.message) messageStore.remember(msg.key, msg.message);
+        }
+    });
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
