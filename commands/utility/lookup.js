@@ -1,6 +1,7 @@
 'use strict';
 
-const { requestJson } = require('../../lib/toosiiApi');
+const { requestJson, scrubVendor } = require('../../lib/toosiiApi');
+const { stripForeignIdentity } = require('../ai/assistant');
 
 const MAX_INPUT_LENGTH = 300;
 
@@ -119,19 +120,42 @@ module.exports = [
             return reply(sock, msg, ctx, `Grammar error: ${failure(error)}`);
         }
 
+        // The dedicated grammar endpoint is frequently rejected upstream (403), so
+        // fall back to the general AI route, which handles proofreading well.
         try {
-            const data = await requestJson('/grammarcheck', { q: text });
+            const data = await requestJson('/grammarcheck', { q: text }, { timeoutMs: 15000 });
             const recommendations = data?.result?.recommendations;
-            if (!Array.isArray(recommendations) || !recommendations.length) {
-                return reply(sock, msg, ctx, `Grammar check\nNo issues were reported for:\n${text}`);
+            if (Array.isArray(recommendations) && recommendations.length) {
+                const lines = recommendations.slice(0, 5).map((item, index) => {
+                    const advice = String(item?.adviceText || 'Suggested revision.').trim();
+                    return `${index + 1}. ${advice}`;
+                });
+                return reply(sock, msg, ctx, `Grammar check\nInput: ${text}\n\n${lines.join('\n')}`);
             }
-            const lines = recommendations.slice(0, 5).map((item, index) => {
-                const advice = String(item?.adviceText || 'Suggested revision.').trim();
-                return `${index + 1}. ${advice}`;
-            });
-            return reply(sock, msg, ctx, `Grammar check\nInput: ${text}\n\n${lines.join('\n')}`);
-        } catch (error) {
-            return reply(sock, msg, ctx, `Grammar check failed: ${failure(error)}`);
+        } catch {
+            // Fall through to the AI proofreader.
         }
+
+        const prompt = [
+            'Proofread the sentence below.',
+            'Reply with the corrected sentence, then a short bullet list of what changed.',
+            'If it is already correct, say so plainly.',
+            '',
+            `Sentence: ${text}`
+        ].join('\n');
+
+        for (const route of ['/ai/gpt', '/keithai']) {
+            try {
+                const data = await requestJson(route, { q: prompt }, { timeoutMs: 25000 });
+                const answer = typeof data?.result === 'string'
+                    ? stripForeignIdentity(scrubVendor(data.result)).trim()
+                    : null;
+                if (answer) return reply(sock, msg, ctx, `Grammar check\nInput: ${text}\n\n${answer.slice(0, 1200)}`);
+            } catch {
+                // Try the next provider.
+            }
+        }
+
+        return reply(sock, msg, ctx, 'Grammar check is unavailable right now. Please try again shortly.');
     })
 ];

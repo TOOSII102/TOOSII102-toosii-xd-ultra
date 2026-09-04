@@ -37,9 +37,14 @@ const PLATFORM_RULES = {
     },
     pinterest: {
         pattern: /(^|\.)((pinterest\.com)|(pin\.it))$/i,
-        videoRoutes: ['/download/pindl3', '/download/pinterest', '/download/pindl2']
+        videoRoutes: ['/download/pindl3']
     }
 };
+
+// Platforms whose upstream resolver is known to be failing. They stay listed so
+// the command exists, but the reply says so plainly instead of implying a
+// transient glitch.
+const UNRELIABLE_PLATFORMS = new Set(['soundcloud']);
 
 function reply(sock, msg, ctx, text) {
     return sock.sendMessage(ctx.from, { text }, { quoted: msg });
@@ -188,6 +193,9 @@ async function handleDownload(sock, msg, ctx, args, platform, kind = 'video') {
 
     const result = await resolveMedia(platform, source, kind);
     const title = result?.title || searched?.title || null;
+    if (!result && UNRELIABLE_PLATFORMS.has(platform)) {
+        return reply(sock, msg, ctx, `The ${platform} resolver is currently unavailable upstream.${title ? `\nFound: ${title}` : ''}\nSource link:\n${source}`);
+    }
     if (result) {
         const label = `${platform} ${kind}`;
         const extra = searched?.duration ? `\nDuration: ${searched.duration}` : '';

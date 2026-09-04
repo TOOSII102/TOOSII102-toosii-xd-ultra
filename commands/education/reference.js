@@ -1,6 +1,7 @@
 'use strict';
 
-const { requestJson } = require('../../lib/toosiiApi');
+const { requestJson, scrubVendor } = require('../../lib/toosiiApi');
+const { stripForeignIdentity } = require('../ai/assistant');
 const { checkRateLimit } = require('../../lib/rateLimiter');
 
 const MAX_QUESTION_LENGTH = 400;
@@ -28,12 +29,30 @@ function failure(error) {
 // The tutor endpoints answer in markdown headings such as "### Question 1".
 // WhatsApp has no heading syntax, so flatten them into plain labelled lines.
 function tidyMarkdown(value) {
-    return String(value)
+    // Fallback answers come from a general AI provider that introduces itself by
+    // vendor name, so apply the same identity rewrite the .ai command uses.
+    return stripForeignIdentity(scrubVendor(String(value)))
         .replace(/^\s*#{1,6}\s*/gm, '')
         .replace(/\*\*(.+?)\*\*/g, '$1')
         .replace(/\n{3,}/g, '\n\n')
         .trim()
         .slice(0, MAX_ANSWER_LENGTH);
+}
+
+// The dedicated tutor endpoints return an empty body whenever their upstream
+// provider is degraded, so fall back to the general AI route with a subject
+// framing rather than reporting a failure the user cannot act on.
+const TUTOR_FALLBACKS = ['/ai/gpt', '/keithai'];
+
+async function fetchAnswer(route, question, label) {
+    try {
+        const data = await requestJson(route, { q: question }, { timeoutMs: 25000 });
+        const answer = typeof data?.result === 'string' ? tidyMarkdown(data.result) : null;
+        if (answer) return answer;
+    } catch {
+        // Fall through to the next candidate.
+    }
+    return null;
 }
 
 // The tutor endpoints are AI backed, so they share the AI rate-limit budget.
@@ -48,14 +67,18 @@ async function askTutor(sock, msg, ctx, args, route, label) {
     const limit = checkRateLimit('ai', ctx.sender || ctx.from);
     if (!limit.allowed) return reply(sock, msg, ctx, `${label} rate limit reached. Try again in ${limit.retryAfterSeconds} seconds.`);
 
-    try {
-        const data = await requestJson(route, { q: question }, { timeoutMs: 25000 });
-        const answer = typeof data?.result === 'string' ? tidyMarkdown(data.result) : null;
-        if (!answer) throw new Error('The service returned no answer.');
-        return reply(sock, msg, ctx, `${label}\n\n${answer}`);
-    } catch (error) {
-        return reply(sock, msg, ctx, `${label} failed: ${failure(error)}`);
+    let answer = await fetchAnswer(route, question, label);
+
+    if (!answer) {
+        const framed = `You are a ${label.toLowerCase()} tutor. Answer clearly and show working where useful.\n\nQuestion: ${question}`;
+        for (const fallback of TUTOR_FALLBACKS) {
+            answer = await fetchAnswer(fallback, framed, label);
+            if (answer) break;
+        }
     }
+
+    if (!answer) return reply(sock, msg, ctx, `${label} is unavailable right now. Please try again shortly.`);
+    return reply(sock, msg, ctx, `${label}\n\n${answer}`);
 }
 
 module.exports = [

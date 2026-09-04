@@ -158,6 +158,24 @@ async function run() {
             const mediaModule = require('../commands/download/media');
             assert.strictEqual(mediaModule.decodeEntities('&#xdb4;&#xddc;&#xdad; &amp; &quot;x&quot;'), 'පොත & "x"');
 
+            // Regression: when a tutor endpoint returns an empty body the command must
+            // fall back to the general AI route rather than reporting a failure.
+            const savedFetch2 = global.fetch;
+            let tutorCalls = [];
+            global.fetch = async (url) => {
+                const href = String(url);
+                tutorCalls.push(href);
+                if (href.includes('/education/')) {
+                    return { ok: true, status: 200, json: async () => ({ status: true, result: '' }) };
+                }
+                return { ok: true, status: 200, json: async () => ({ status: true, result: 'Twelve times eight is 96.' }) };
+            };
+            const solveReply = await execute(commands, 'solve', basicSock, ['12*8'], ctx);
+            global.fetch = savedFetch2;
+            assert.match(solveReply, /96/, 'an empty tutor response must fall back to the AI route');
+            assert.ok(tutorCalls.some((u) => u.includes('/education/maths')), 'the dedicated endpoint is tried first');
+            assert.ok(tutorCalls.some((u) => u.includes('/ai/gpt')), 'the AI fallback is used when the tutor is empty');
+
             // .play must accept a song name, not only a URL.
             assert.strictEqual(mediaModule.looksLikeUrl('https://youtu.be/abc'), true);
             assert.strictEqual(mediaModule.looksLikeUrl('alan walker faded'), false);
