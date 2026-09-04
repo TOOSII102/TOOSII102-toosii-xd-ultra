@@ -3,9 +3,13 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const root = path.join(__dirname, '..');
-const sessionDir = path.join(root, 'session');
+// Never point at the real session/: this directory gets deleted on cleanup, and
+// doing that to a live session logs the bot out of WhatsApp.
+const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'toosii-session-test-'));
+process.env.SESSION_DIR = sessionDir;
 const credsPath = path.join(sessionDir, 'creds.json');
 const modeFile = path.join(root, 'data', 'bot-mode.test.json');
 const ownerNumber = '254712345678';
