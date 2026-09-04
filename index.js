@@ -17,7 +17,7 @@ const { isOwnerMessage, setRuntimeOwner } = require('./middleware/ownerOnly');
 const { getBotMode } = require('./lib/botMode');
 const { getCommandAccess } = require('./lib/commandAccess');
 
-const logger = pino({ level: 'silent' });
+const logger = pino({ level: process.env.WA_LOG_LEVEL || 'silent' });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 
 function debug(message) {
