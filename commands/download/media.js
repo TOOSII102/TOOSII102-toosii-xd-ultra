@@ -2,6 +2,7 @@
 
 const { requestJson } = require('../../lib/toosiiApi');
 const { checkRateLimit } = require('../../lib/rateLimiter');
+const { fetchMedia, sendAudio, sendVideo, sendFile } = require('../../lib/mediaSender');
 
 const MAX_URL_LENGTH = 1000;
 const PLATFORM_RULES = {
@@ -99,7 +100,7 @@ function findMediaUrl(value, depth = 0) {
     }
     if (typeof value !== 'object') return null;
 
-    for (const key of ['download_url', 'downloadUrl', 'downloadLink', 'hd', 'sd', 'url', 'video', 'play', 'link', 'media', 'audio', 'thumb', 'image']) {
+    for (const key of ['download_url', 'downloadUrl', 'downloadLink', 'hd', 'sd', 'video', 'play', 'media', 'audio', 'url', 'link', 'thumb', 'image']) {
         const result = findMediaUrl(value[key], depth + 1);
         if (result) return result;
     }
@@ -141,8 +142,14 @@ function extractTitle(value) {
     return null;
 }
 
+// Some single-route platforms (Pinterest) fail intermittently upstream rather
+// than consistently, so a lone attempt under-reports what actually works.
+const RETRY_ATTEMPTS = 2;
+
 async function resolveFromRoutes(routes, source) {
-    for (const route of routes) {
+    const attempts = [];
+    for (let pass = 0; pass < RETRY_ATTEMPTS; pass += 1) attempts.push(...routes);
+    for (const route of attempts) {
         try {
             const data = await requestJson(route, { url: source }, { timeoutMs: 30000 });
             // A few resolvers answer status:true while nesting the real failure in
@@ -196,12 +203,32 @@ async function handleDownload(sock, msg, ctx, args, platform, kind = 'video') {
     if (!result && UNRELIABLE_PLATFORMS.has(platform)) {
         return reply(sock, msg, ctx, `The ${platform} resolver is currently unavailable upstream.${title ? `\nFound: ${title}` : ''}\nSource link:\n${source}`);
     }
-    if (result) {
-        const label = `${platform} ${kind}`;
-        const extra = searched?.duration ? `\nDuration: ${searched.duration}` : '';
-        return reply(sock, msg, ctx, `Resolved ${label} link${title ? ` — ${title}` : ''}:${extra}\n${result.mediaUrl}\n\nOnly download or share media you are authorized to use.`);
+    if (!result) {
+        return reply(sock, msg, ctx, `Media services are unavailable.${title ? `\nFound: ${title}` : ''}\nFallback source link:\n${source}`);
     }
-    return reply(sock, msg, ctx, `Media services are unavailable.${title ? `\nFound: ${title}` : ''}\nFallback source link:\n${source}`);
+
+    // Deliver the actual file. Falling back to the bare link only happens when
+    // the upload genuinely cannot be done, so the link stays a last resort
+    // rather than the normal outcome.
+    const heading = title ? `${title}` : `${platform} ${kind}`;
+    try {
+        const isFile = platform === 'mediafire' || platform === 'pinterest';
+        const fetchKind = kind === 'audio' ? 'audio' : (isFile ? 'file' : 'video');
+        const media = await fetchMedia(result.mediaUrl, fetchKind, source);
+        if (kind === 'audio') {
+            await sendAudio(sock, ctx.from, msg, media, title || `${platform}-audio`);
+        } else if (isFile) {
+            // These are arbitrary files or images rather than streamable video.
+            await sendFile(sock, ctx.from, msg, media, title || platform, title || undefined);
+        } else {
+            const caption = [heading, searched?.duration ? `Duration: ${searched.duration}` : null]
+                .filter(Boolean).join('\n');
+            await sendVideo(sock, ctx.from, msg, media, title || `${platform}-video`, caption);
+        }
+        return true;
+    } catch (error) {
+        return reply(sock, msg, ctx, `Could not upload the file: ${error.message}${title ? `\nFound: ${title}` : ''}\nDirect link:\n${result.mediaUrl}`);
+    }
 }
 
 module.exports = [

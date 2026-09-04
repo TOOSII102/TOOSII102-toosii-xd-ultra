@@ -280,3 +280,77 @@ run().catch((error) => {
     console.error(error.stack || error);
     process.exitCode = 1;
 });
+
+// --- media delivery -------------------------------------------------------
+// .play and .yta must upload real files, not post a link. Regression guard for
+// the bug where every download command replied with a bare URL.
+{
+    const { looksLikeMedia, safeFileName, extensionFor, mimeFor } = require('../lib/mediaSender');
+
+    const mp3 = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(8192)]);
+    assert.ok(looksLikeMedia(mp3, 'audio/mpeg', 'audio'), 'an ID3 MP3 body must be accepted as audio');
+
+    const html = Buffer.concat([Buffer.from('<!DOCTYPE html><html>'), Buffer.alloc(8192)]);
+    assert.ok(!looksLikeMedia(html, 'text/html', 'audio'), 'an HTML error page must never be uploaded as audio');
+    assert.ok(!looksLikeMedia(Buffer.alloc(100), 'audio/mpeg', 'audio'), 'a truncated body must be rejected');
+
+    const mp4 = Buffer.concat([Buffer.alloc(4), Buffer.from('ftyp'), Buffer.alloc(8192)]);
+    assert.ok(looksLikeMedia(mp4, 'video/mp4', 'video'), 'an ftyp MP4 body must be accepted as video');
+
+    // Documents are arbitrary binaries, so only error pages are rejected.
+    assert.ok(looksLikeMedia(Buffer.alloc(8192), 'application/x-dosexec', 'file'), 'a binary document must be accepted');
+    assert.ok(!looksLikeMedia(html, 'text/html', 'file'), 'an HTML error page must never be uploaded as a document');
+
+    assert.strictEqual(safeFileName('AC/DC: Back <in> Black', 'mp3'), 'AC DC Back in Black.mp3');
+    assert.strictEqual(safeFileName('', 'mp3'), 'download.mp3');
+    assert.ok(!safeFileName('../../etc/passwd', 'mp3').includes('/'), 'file names must never contain path separators');
+
+    // CDN links often report octet-stream, so the URL extension decides.
+    assert.strictEqual(extensionFor('audio', 'application/octet-stream', 'https://cdn.test/x/song.m4a'), 'm4a');
+    assert.strictEqual(extensionFor('audio', 'application/octet-stream', 'https://cdn.test/x/song'), 'mp3');
+    assert.strictEqual(mimeFor('audio', 'mp3'), 'audio/mpeg');
+    assert.strictEqual(mimeFor('file', 'exe', 'application/x-dosexec'), 'application/x-dosexec');
+
+    console.log('Media delivery tests passed: audio, video and document payload validation verified.');
+}
+
+// .yta must send the song twice: a playable audio message and a saveable
+// document, which is what "mp3 and document format" means to a user.
+async function testAudioDelivery() {
+    const media = require('../commands/download/media');
+    const yta = media.find((c) => c.name === 'yta');
+    const sent = [];
+    const sock = { sendMessage: async (_jid, content) => { sent.push(content); return { key: {} }; } };
+
+    const originalFetch = global.fetch;
+    global.fetch = async (input) => {
+        const url = String(input?.url || input);
+        if (url.includes('/download/')) {
+            return new Response(JSON.stringify({ status: true, result: 'https://cdn.test/track.mp3' }),
+                { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        return new Response(Buffer.concat([Buffer.from('ID3'), Buffer.alloc(9000)]),
+            { status: 200, headers: { 'content-type': 'audio/mpeg' } });
+    };
+    try {
+        await yta.execute(sock, {}, ['https://youtube.com/watch?v=abc'],
+            { from: 't', sender: 'media-test-user', prefix: '.' });
+    } finally {
+        global.fetch = originalFetch;
+    }
+
+    assert.strictEqual(sent.length, 2, '.yta must send exactly two messages');
+    assert.ok(sent[0].audio, 'the first .yta message must be a playable audio message');
+    assert.strictEqual(sent[0].mimetype, 'audio/mpeg');
+    assert.ok(sent[0].fileName.endsWith('.mp3'), 'the audio message must carry an .mp3 file name');
+    assert.ok(sent[1].document, 'the second .yta message must be a document');
+    assert.ok(sent[1].fileName.endsWith('.mp3'), 'the document must carry an .mp3 file name');
+    assert.ok(!sent.some((m) => typeof m.text === 'string'), '.yta must not fall back to a text link when the upload works');
+
+    console.log('Audio delivery tests passed: .yta sends a playable audio message plus an mp3 document.');
+}
+
+testAudioDelivery().catch((error) => {
+    console.error(error);
+    process.exit(1);
+});
