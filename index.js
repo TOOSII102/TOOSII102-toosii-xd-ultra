@@ -114,7 +114,18 @@ async function start() {
         browser: Browsers.macOS('Safari'),
         printQRInTerminal: false,
         syncFullHistory: false,
-        markOnlineOnConnect: true
+        markOnlineOnConnect: true,
+        // Without an explicit keepalive the server stops seeing traffic and drops
+        // the socket with status 408 after roughly a minute, which shows up as a
+        // connect/disconnect loop where the bot never answers a command.
+        keepAliveIntervalMs: 25000,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        retryRequestDelayMs: 1000,
+        // Baileys asks for the original message when it has to resend one. With no
+        // store configured this must still return an object, or the retry throws
+        // and takes the connection down with it.
+        getMessage: async () => ({ conversation: '' })
     });
 
     // Capture both phone-JID and LID identities supplied by Baileys. This is
