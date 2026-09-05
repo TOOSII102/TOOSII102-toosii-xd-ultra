@@ -416,3 +416,47 @@ testAudioDelivery().catch((error) => {
 
     console.log('Disconnect tests passed: a 401 conflict reconnects while a real logout stops.');
 }
+
+// --- reply formatting ------------------------------------------------------
+// Every reply must carry the house frame. It is applied by wrapping the
+// socket's sendMessage once, rather than editing 100+ command bodies.
+{
+    const { frame, isFramed, withFramedReplies } = require('../lib/replyFormat');
+
+    const framed = frame('Hello', 'PING', 'TOOSII-XD-ULTRA');
+    assert.ok(framed.startsWith('╔═|〔  PING 〕'), 'the frame must open with the command title');
+    assert.ok(framed.includes('\n║ Hello'), 'body lines must be prefixed with the edge character');
+    assert.ok(framed.endsWith('╚═|〔 TOOSII-XD-ULTRA 〕'), 'the frame must close with the bot name');
+
+    // Commands that already emit the frame must not be wrapped a second time.
+    assert.ok(isFramed(framed), 'an already framed message must be detected');
+
+    // Blank lines are preserved as bare edges so paragraphs stay readable.
+    assert.ok(frame('a\n\nb', 'X', 'BOT').includes('\n║\n║ b'), 'blank lines must survive framing');
+
+    // A URL must stay on one line or WhatsApp will not linkify it.
+    const link = 'https://example.com/' + 'x'.repeat(80);
+    const linkFramed = frame(`See:\n${link}`, 'YTA', 'BOT');
+    assert.ok(linkFramed.includes(`║ ${link}`), 'a long URL must never be split across lines');
+
+    // Long prose is wrapped so the frame stays straight on a phone screen.
+    const prose = frame('word '.repeat(40).trim(), 'AI', 'BOT');
+    assert.ok(prose.split('\n').every((l) => l.length <= 60), 'wrapped lines must stay narrow');
+
+    // The wrapper must frame text and captions while leaving media buffers alone.
+    const captured = [];
+    const sock = { sendMessage: async (_jid, content) => { captured.push(content); return {}; } };
+    withFramedReplies(sock, 'BOT', () => 'PLAY');
+    (async () => {
+        await sock.sendMessage('j', { text: 'plain' });
+        await sock.sendMessage('j', { video: Buffer.from('v'), caption: 'cap' });
+        await sock.sendMessage('j', { audio: Buffer.from('a'), mimetype: 'audio/mpeg' });
+
+        assert.ok(captured[0].text.startsWith('╔═|〔  PLAY 〕'), 'text replies must be framed');
+        assert.ok(captured[1].caption.startsWith('╔═|〔  PLAY 〕'), 'media captions must be framed');
+        assert.ok(Buffer.isBuffer(captured[1].video), 'the media buffer must be passed through untouched');
+        assert.strictEqual(captured[2].caption, undefined, 'a media message without a caption must not gain one');
+    })();
+
+    console.log('Reply format tests passed: every reply is framed, links stay intact and media is untouched.');
+}

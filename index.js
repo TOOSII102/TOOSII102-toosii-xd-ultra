@@ -15,6 +15,7 @@ const { loadSessionFromId, SESSION_DIR } = require('./lib/sessionLoader');
 const { loadCommands } = require('./lib/commandLoader');
 const { isOwnerMessage, setRuntimeOwner } = require('./middleware/ownerOnly');
 const messageStore = require('./lib/messageStore');
+const { withFramedReplies } = require('./lib/replyFormat');
 const { getBotMode } = require('./lib/botMode');
 const { getCommandAccess } = require('./lib/commandAccess');
 
@@ -137,6 +138,11 @@ async function start() {
     // required because WhatsApp may represent self-chat messages differently
     // from the linked device identity stored in creds.json.
     setRuntimeOwner(sock.user);
+
+    // Every reply leaves through one place, so the house style is applied here
+    // instead of being repeated in each of the 100+ commands.
+    let activeCommandTitle = null;
+    withFramedReplies(sock, BOT_NAME, () => activeCommandTitle);
 
     // ==============================================
     // 🔑 PAIRING CODE REQUEST
@@ -310,16 +316,21 @@ async function start() {
             };
 
             if (!access.allowed) {
+                activeCommandTitle = command.name;
                 await safeSend(sock, ctx.from, access.reason, msg);
+                activeCommandTitle = null;
                 continue;
             }
 
             try {
+                activeCommandTitle = command.name;
                 await command.execute(sock, msg, args, ctx);
             } catch (err) {
                 console.error(chalk.red(`[Commands] Error running "${cmdName}":`), err);
                 // Report the failure without leaking internals to the chat.
                 await safeSend(sock, ctx.from, `⚠️ That command failed. Please try again.`, msg);
+            } finally {
+                activeCommandTitle = null;
             }
           } catch (err) {
             // One malformed message must never stop the remaining ones.
