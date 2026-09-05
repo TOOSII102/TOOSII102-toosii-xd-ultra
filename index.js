@@ -176,12 +176,23 @@ async function start() {
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const errorMsg = lastDisconnect?.error?.message || 'no message';
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+            // WhatsApp reports a "conflict" stream error as 401, the same code it
+            // uses for a real logout. A conflict only means another device took
+            // over the session, and the credentials stay valid, so treating it as
+            // a logout retires a session that is still perfectly good.
+            const isConflict = /conflict|replaced/i.test(errorMsg);
+            const loggedOut = statusCode === DisconnectReason.loggedOut && !isConflict;
+            const shouldReconnect = !loggedOut;
             console.log(chalk.red(`[${BOT_NAME}] Connection closed. Status: ${statusCode}, Reason: ${errorMsg}, Reconnect: ${shouldReconnect}`));
 
             if (!shouldReconnect) {
                 console.log(chalk.yellow(`[${BOT_NAME}] The device was unlinked from WhatsApp. Delete ./session and link again.`));
                 return;
+            }
+
+            if (isConflict) {
+                console.log(chalk.yellow(`[${BOT_NAME}] Another device took over this session. Reconnecting; close other instances if this repeats.`));
             }
 
             // Back off between attempts. Reconnecting in a tight loop is what gets

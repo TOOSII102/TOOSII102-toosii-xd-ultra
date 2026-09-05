@@ -388,3 +388,31 @@ testAudioDelivery().catch((error) => {
 
     console.log('Retry store tests passed: sent messages are recalled for resends and the store stays bounded.');
 }
+
+// --- disconnect classification ---------------------------------------------
+// WhatsApp sends status 401 both for a genuine logout and for a "conflict"
+// stream error, which only means another device took over. Treating a conflict
+// as a logout permanently stops a bot whose credentials are still valid.
+{
+    const LOGGED_OUT = 401;
+
+    function shouldReconnect(statusCode, errorMsg) {
+        const isConflict = /conflict|replaced/i.test(errorMsg || '');
+        return !(statusCode === LOGGED_OUT && !isConflict);
+    }
+
+    assert.strictEqual(shouldReconnect(401, 'Stream Errored (conflict)'), true,
+        'a 401 conflict must reconnect: the session is still valid');
+    assert.strictEqual(shouldReconnect(401, 'Connection replaced'), true,
+        'a replaced connection must reconnect');
+    assert.strictEqual(shouldReconnect(401, 'Logged Out'), false,
+        'a genuine logout must not reconnect');
+    assert.strictEqual(shouldReconnect(408, 'Connection was lost'), true,
+        'a timeout must reconnect');
+    assert.strictEqual(shouldReconnect(515, 'Restart required'), true,
+        'a restart-required must reconnect');
+    assert.strictEqual(shouldReconnect(401, ''), false,
+        'a bare 401 with no detail must be treated as a logout');
+
+    console.log('Disconnect tests passed: a 401 conflict reconnects while a real logout stops.');
+}
