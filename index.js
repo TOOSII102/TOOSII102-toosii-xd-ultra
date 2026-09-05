@@ -39,6 +39,10 @@ async function safeSend(sock, jid, text, quoted) {
 
 let reconnectAttempts = 0;
 
+// Message ids already executed, so a redelivery cannot run a command twice.
+const handledMessageIds = new Set();
+const HANDLED_ID_LIMIT = 2000;
+
 const PLACEHOLDER_NUMBER = '254700000000';
 const PLACEHOLDER_SESSION_MARKER = 'PASTE_YOUR_SESSION_STRING_HERE';
 
@@ -213,12 +217,30 @@ async function start() {
     // 💬 MESSAGE HANDLER (with self‑detection)
     // ==============================================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        // Only execute newly received messages; `append` commonly contains history replay.
-        if (type !== 'notify') return;
-        debug(`[Debug] messages.upsert fired — count: ${messages.length}`);
+        // Baileys uses 'append' for more than history replay. A message that
+        // initially failed to decrypt and was recovered through the retry path is
+        // emitted as 'append', and so is anything delivered while the bot was
+        // offline. Ignoring those silently drops real commands, which is why the
+        // bot answered in self-chat but often not from another phone.
+        if (type !== 'notify' && type !== 'append') return;
+        debug(`[Debug] messages.upsert fired — type: ${type}, count: ${messages.length}`);
 
         for (const msg of messages) {
           try {
+            // The same message id can surface twice, e.g. an 'append' recovery of
+            // something already handled. Run each command at most once.
+            if (msg?.key?.id) {
+                if (handledMessageIds.has(msg.key.id)) {
+                    debug(`[Debug] Skipping duplicate message ${msg.key.id}`);
+                    continue;
+                }
+                handledMessageIds.add(msg.key.id);
+                if (handledMessageIds.size > HANDLED_ID_LIMIT) {
+                    const oldest = handledMessageIds.values().next().value;
+                    if (oldest !== undefined) handledMessageIds.delete(oldest);
+                }
+            }
+
             const senderJid = msg.key.remoteJid;
             const participant = msg.key.participant || senderJid;
 

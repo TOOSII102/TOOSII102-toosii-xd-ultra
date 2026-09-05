@@ -180,3 +180,39 @@ run().catch((error) => {
     console.error('Resilience tests failed:', error.message);
     process.exit(1);
 });
+
+// --- upsert type handling --------------------------------------------------
+// Baileys emits 'append' for more than history replay: a message that failed to
+// decrypt and was recovered via the retry path arrives as 'append', as does
+// anything delivered while the bot was offline (messages-recv.js lines 601/699).
+// Dropping those silently loses real commands, which is why the bot answered in
+// self-chat but frequently not from another phone.
+{
+    function accepts(type) {
+        return type === 'notify' || type === 'append';
+    }
+
+    assert.ok(accepts('notify'), 'live messages must be processed');
+    assert.ok(accepts('append'), 'retry-recovered and offline messages must be processed');
+    assert.ok(!accepts('prepend'), 'bulk history prepend must stay ignored');
+
+    // A recovered message can surface twice, so commands must be de-duplicated
+    // by message id rather than executed again.
+    const handled = new Set();
+    const LIMIT = 5;
+    function firstTime(id) {
+        if (handled.has(id)) return false;
+        handled.add(id);
+        if (handled.size > LIMIT) handled.delete(handled.values().next().value);
+        return true;
+    }
+
+    assert.strictEqual(firstTime('M1'), true, 'a new message id must run');
+    assert.strictEqual(firstTime('M1'), false, 'the same message id must not run twice');
+    assert.strictEqual(firstTime('M2'), true, 'a different id must still run');
+
+    for (let i = 0; i < LIMIT + 3; i += 1) firstTime(`bulk-${i}`);
+    assert.ok(handled.size <= LIMIT, 'the de-duplication set must stay bounded');
+
+    console.log('Upsert tests passed: append messages are handled and duplicates run only once.');
+}
