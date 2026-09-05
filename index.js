@@ -227,18 +227,14 @@ async function start() {
 
         for (const msg of messages) {
           try {
-            // The same message id can surface twice, e.g. an 'append' recovery of
-            // something already handled. Run each command at most once.
-            if (msg?.key?.id) {
-                if (handledMessageIds.has(msg.key.id)) {
-                    debug(`[Debug] Skipping duplicate message ${msg.key.id}`);
-                    continue;
-                }
-                handledMessageIds.add(msg.key.id);
-                if (handledMessageIds.size > HANDLED_ID_LIMIT) {
-                    const oldest = handledMessageIds.values().next().value;
-                    if (oldest !== undefined) handledMessageIds.delete(oldest);
-                }
+            // A redelivery of the same id must not run a command twice. The check
+            // happens here, but the id is only recorded once a command actually
+            // runs: WhatsApp often delivers an undecryptable placeholder first and
+            // the real content in a later retry under the same id, so recording it
+            // on arrival would discard the copy that carries the command.
+            if (msg?.key?.id && handledMessageIds.has(msg.key.id)) {
+                debug(`[Debug] Skipping duplicate message ${msg.key.id}`);
+                continue;
             }
 
             const senderJid = msg.key.remoteJid;
@@ -288,6 +284,16 @@ async function start() {
             }
 
             debug(`[Debug] Executing command: ${cmdName}`);
+
+            // Record only now, so a placeholder that carried no readable command
+            // never blocks the retry that does.
+            if (msg.key?.id) {
+                handledMessageIds.add(msg.key.id);
+                if (handledMessageIds.size > HANDLED_ID_LIMIT) {
+                    const oldest = handledMessageIds.values().next().value;
+                    if (oldest !== undefined) handledMessageIds.delete(oldest);
+                }
+            }
 
             const sender = participant || senderJid;
             const owner = isOwnerMessage(sender, isFromMe);
