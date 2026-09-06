@@ -582,3 +582,41 @@ testMovieCommands().catch((error) => {
     console.error(error);
     process.exit(1);
 });
+
+// --- Toosii Tech platform commands -----------------------------------------
+// Backed by the project's own developer API. Tests cover wiring and input
+// handling rather than live network results.
+async function testToosiiTechCommands() {
+    const commands = require('../commands/download/toosiitech');
+    const names = commands.map((c) => c.name);
+    for (const expected of ['spotify', 'sports', 'book', 'holidays']) {
+        assert.ok(names.includes(expected), `${expected} must be registered`);
+    }
+
+    const replies = [];
+    const sock = { sendMessage: async (_jid, content) => { replies.push(content.text || ''); return {}; } };
+    const ctx = { from: 't', sender: 'toosiitech-test-user', prefix: '.' };
+
+    await commands.find((c) => c.name === 'spotify').execute(sock, {}, [], ctx);
+    assert.match(replies.at(-1), /Usage/, 'an empty spotify query must return usage');
+
+    await commands.find((c) => c.name === 'book').execute(sock, {}, [], ctx);
+    assert.match(replies.at(-1), /Usage/, 'an empty book query must return usage');
+
+    await commands.find((c) => c.name === 'holidays').execute(sock, {}, ['toolong'], ctx);
+    assert.match(replies.at(-1), /Usage|No holidays/, 'a bad country code must be handled');
+
+    // The movie catalogue on this platform redirects to the same upstream the
+    // movie commands already use, so it must not be wired up twice.
+    const source = require('fs').readFileSync(
+        require('path').join(__dirname, '..', 'commands', 'download', 'toosiitech.js'), 'utf-8');
+    assert.ok(!/action=(movies|trending)/.test(source),
+        'the duplicated movie catalogue must not be re-wired through this platform');
+
+    console.log('Toosii Tech tests passed: new capabilities wired, movie catalogue not duplicated.');
+}
+
+testToosiiTechCommands().catch((error) => {
+    console.error(error);
+    process.exit(1);
+});
