@@ -343,6 +343,13 @@ async function testAudioDelivery() {
         global.fetch = originalFetch;
     }
 
+    // .play is the command people use to hear a song, so it must resolve to
+    // audio. It was previously an alias of .ytv and silently sent video.
+    const play = media.find((c) => c.name === 'play');
+    assert.ok(play, '.play must be its own command, not a video alias');
+    const ytv = media.find((c) => c.name === 'ytv');
+    assert.ok(!(ytv.aliases || []).includes('play'), '.play must not be an alias of the video command');
+
     assert.strictEqual(sent.length, 2, '.yta must send exactly two messages');
     assert.ok(sent[0].audio, 'the first .yta message must be a playable audio message');
     assert.strictEqual(sent[0].mimetype, 'audio/mpeg');

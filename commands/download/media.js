@@ -234,15 +234,24 @@ async function handleDownload(sock, msg, ctx, args, platform, kind = 'video') {
 module.exports = [
     {
         name: 'ytv',
-        aliases: ['youtube', 'youtubevideo', 'play'],
-        description: 'Play a YouTube video by name or link.',
+        aliases: ['youtube', 'youtubevideo'],
+        description: 'Download a YouTube video by name or link.',
         category: 'download',
         execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'youtube', 'video')
     },
     {
+        // .play is what people reach for to hear a song, so it must deliver
+        // audio. It used to be an alias of .ytv and therefore sent video.
+        name: 'play',
+        aliases: ['song', 'music'],
+        description: 'Play a song: sends the audio plus an mp3 document.',
+        category: 'download',
+        execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'youtube', 'audio')
+    },
+    {
         name: 'yta',
         aliases: ['youtubeaudio', 'ytmp3'],
-        description: 'Play YouTube audio by name or link.',
+        description: 'Download YouTube audio: sends the audio plus an mp3 document.',
         category: 'download',
         execute: async (sock, msg, args, ctx) => handleDownload(sock, msg, ctx, args, 'youtube', 'audio')
     },
