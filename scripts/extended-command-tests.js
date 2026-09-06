@@ -467,3 +467,71 @@ testAudioDelivery().catch((error) => {
 
     console.log('Reply format tests passed: every reply is framed, links stay intact and media is untouched.');
 }
+
+// --- new public-API commands -----------------------------------------------
+// These are backed by third-party services, so the tests cover the wiring and
+// the guards rather than live network results.
+async function testPublicApiCommands() {
+    const { ALLOWED_HOSTS, fetchJson, formatNumber } = require('../lib/publicApi');
+
+    // An allowlist stops a malformed or user-influenced value turning the
+    // helper into a general-purpose request proxy.
+    await assert.rejects(() => fetchJson('https://evil.example.com/x'),
+        /not permitted/, 'a host outside the allowlist must be refused');
+    await assert.rejects(() => fetchJson('http://api.coingecko.com/x'),
+        /HTTPS/, 'plain HTTP must be refused');
+    await assert.rejects(() => fetchJson('not a url'),
+        /could not be built/, 'a malformed URL must be refused');
+    assert.ok(ALLOWED_HOSTS.has('api.coingecko.com'), 'known good hosts must be allowed');
+
+    assert.strictEqual(formatNumber(1234567.891), '1,234,567.89');
+    assert.strictEqual(formatNumber('nonsense'), 'nonsense');
+
+    const tools = require('../commands/utility/tools');
+    const names = tools.map((c) => c.name);
+    for (const expected of ['crypto', 'cryptotop', 'rates', 'currency', 'weather', 'npm', 'horoscope', 'bible', 'qr']) {
+        assert.ok(names.includes(expected), `${expected} must be registered`);
+    }
+
+    // Bad input must produce usage help, never an unhandled throw.
+    const replies = [];
+    const sock = { sendMessage: async (_jid, content) => { replies.push(content.text || ''); return {}; } };
+    const ctx = { from: 't', sender: 'tools-test-user', prefix: '.' };
+    const currency = tools.find((c) => c.name === 'currency');
+    await currency.execute(sock, {}, ['abc'], ctx);
+    assert.match(replies.at(-1), /Usage/, 'bad input must return usage rather than throwing');
+
+    const horoscope = tools.find((c) => c.name === 'horoscope');
+    await horoscope.execute(sock, {}, ['notasign'], ctx);
+    assert.match(replies.at(-1), /Signs:/, 'an invalid star sign must list the valid ones');
+
+    console.log('Public API tests passed: host allowlist enforced and bad input handled.');
+}
+
+// .update and .restart are destructive, so both must be owner-gated and must
+// refuse to act when they cannot verify the environment first.
+async function testMaintenanceCommands() {
+    const maintenance = require('../commands/owner/maintenance');
+    const update = maintenance.find((c) => c.name === 'update');
+    const restart = maintenance.find((c) => c.name === 'restart');
+
+    assert.ok(update && restart, 'update and restart must both be registered');
+    assert.strictEqual(update.category, 'owner', '.update must be owner category');
+    assert.strictEqual(restart.category, 'owner', '.restart must be owner category');
+
+    const replies = [];
+    const sock = { sendMessage: async (_jid, content) => { replies.push(content.text || ''); return {}; } };
+
+    await update.execute(sock, { key: {} }, [], { from: 't', sender: '254700000001@s.whatsapp.net', prefix: '.', isOwner: false });
+    assert.match(replies.at(-1), /Access denied/, 'a non-owner must not be able to run .update');
+
+    await restart.execute(sock, { key: {} }, [], { from: 't', sender: '254700000001@s.whatsapp.net', prefix: '.', isOwner: false });
+    assert.match(replies.at(-1), /Access denied/, 'a non-owner must not be able to run .restart');
+
+    console.log('Maintenance tests passed: .update and .restart are owner-only.');
+}
+
+Promise.all([testPublicApiCommands(), testMaintenanceCommands()]).catch((error) => {
+    console.error(error);
+    process.exit(1);
+});

@@ -63,7 +63,12 @@ async function run() {
         ];
         for (const name of expectedNames) assert.ok(commands.has(name), `missing command: ${name}`);
         assert.ok(commands.has('help') && commands.has('calculate') && commands.has('eightball') && commands.has('wikisearch') && commands.has('botmode'), 'expected aliases to load');
-        assert.ok(!commands.has('update') && !commands.has('upgrade') && !commands.has('pull'), 'update command and aliases should not load');
+        // An earlier .update was removed in 131ef0a. It was reinstated on request,
+        // this time as an owner-only command that refuses to run on a dirty tree
+        // or when a fast-forward is not possible.
+        assert.ok(commands.has('update') && commands.has('pull'), 'update command and aliases should load');
+        assert.strictEqual(commands.get('update').category, 'owner', '.update must stay owner-only');
+        assert.ok(commands.has('restart') && commands.get('restart').category === 'owner', '.restart must be owner-only');
 
         const categories = new Set(commands.catalog.map((command) => command.category));
         for (const category of ['utility', 'fun', 'games', 'education', 'spiritual', 'search', 'owner']) {
