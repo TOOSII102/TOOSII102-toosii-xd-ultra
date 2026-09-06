@@ -121,10 +121,13 @@ module.exports = [
         }
     }),
 
-    command('movie', ['filminfo', 'moviesearch'], 'Look up public information about a film.', async (sock, msg, args, ctx) => {
+    // Renamed from 'movie' when the Dave Tech movie API was added: that source
+    // also provides downloads, so it takes the plain .movie name while this one
+    // keeps the IMDb-style ratings lookup under .movieinfo.
+    command('movieinfo', ['filminfo', 'moviesearch', 'imdb'], 'Look up ratings and public information about a film.', async (sock, msg, args, ctx) => {
         let title;
         try {
-            title = getQuery(args, `${ctx.prefix}movie <title>`);
+            title = getQuery(args, `${ctx.prefix}movieinfo <title>`);
         } catch (error) {
             return reply(sock, msg, ctx, `Movie error: ${failure(error)}`);
         }

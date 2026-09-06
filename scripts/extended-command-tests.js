@@ -535,3 +535,50 @@ Promise.all([testPublicApiCommands(), testMaintenanceCommands()]).catch((error) 
     console.error(error);
     process.exit(1);
 });
+
+// --- movie / TV / anime commands -------------------------------------------
+// Backed by the Dave Tech Movie API. Tests cover input validation and the size
+// guard rather than live network results.
+async function testMovieCommands() {
+    const movieApi = require('../lib/movieApi');
+
+    // Subject ids go into a URL path, so anything path-like must be rejected.
+    assert.strictEqual(movieApi.assertSubjectId('6391474290696802080'), '6391474290696802080');
+    for (const bad of ['../etc/passwd', '12', 'abc', '', null, '123/../x']) {
+        assert.throws(() => movieApi.assertSubjectId(bad), /not valid/, `${bad} must be rejected`);
+    }
+
+    assert.strictEqual(movieApi.formatBytes(777303372), '741 MB');
+    assert.strictEqual(movieApi.formatBytes(2 * 1024 ** 3), '2.00 GB');
+    assert.strictEqual(movieApi.formatBytes(0), 'unknown size');
+
+    const movies = require('../commands/download/movies');
+    const names = movies.map((c) => c.name);
+    for (const expected of ['movie', 'series', 'anime', 'episodes', 'trending', 'hotmovies', 'subtitles', 'getmovie']) {
+        assert.ok(names.includes(expected), `${expected} must be registered`);
+    }
+
+    // Bad input must produce usage help, never an unhandled throw.
+    const replies = [];
+    const sock = { sendMessage: async (_jid, content) => { replies.push(content.text || content.caption || ''); return {}; } };
+    const ctx = { from: 't', sender: 'movie-test-user', prefix: '.' };
+
+    await movies.find((c) => c.name === 'getmovie').execute(sock, {}, ['not-an-id'], ctx);
+    assert.match(replies.at(-1), /Usage/, 'a bad id must return usage rather than throwing');
+
+    await movies.find((c) => c.name === 'movie').execute(sock, {}, [], ctx);
+    assert.match(replies.at(-1), /Usage/, 'an empty query must return usage');
+
+    // The old ratings lookup was renamed rather than dropped, so both survive.
+    const { loadCommands } = require('../lib/commandLoader');
+    const loaded = loadCommands();
+    assert.strictEqual(loaded.get('movie').category, 'download', '.movie must be the downloadable source');
+    assert.ok(loaded.get('movieinfo'), '.movieinfo must still provide the ratings lookup');
+
+    console.log('Movie tests passed: ids validated, sizes formatted and bad input handled.');
+}
+
+testMovieCommands().catch((error) => {
+    console.error(error);
+    process.exit(1);
+});
