@@ -216,3 +216,45 @@ run().catch((error) => {
 
     console.log('Upsert tests passed: append messages are handled and duplicates run only once.');
 }
+
+// --- deployment configuration ----------------------------------------------
+// A misconfigured deploy silently costs the WhatsApp session, so the parts that
+// protect it are asserted here rather than left to a manual read.
+{
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '..');
+    const read = (file) => fs.readFileSync(path.join(root, file), 'utf-8');
+
+    // session/ holds the Signal keys. If it is not persisted, every redeploy
+    // logs the device out.
+    const compose = read('docker-compose.yml');
+    assert.match(compose, /restart:\s*unless-stopped/, 'compose must restart the bot automatically');
+    assert.match(compose, /session:\/app\/session/, 'compose must persist session/');
+    assert.match(compose, /RESTART_SUPERVISED/, 'compose must tell .restart it is supervised');
+
+    const render = read('render.yaml');
+    assert.match(render, /type:\s*worker/, 'render must run a worker, not a web service');
+    assert.match(render, /mountPath:.*session/, 'render must mount a disk at session/');
+
+    // .update shells out to git, so the checkout has to survive into the image.
+    const dockerignore = read('.dockerignore').split('\n').map((line) => line.trim());
+    assert.ok(!dockerignore.includes('.git'), '.git must stay in the build context or .update cannot work');
+    for (const secret of ['session', 'data', '.env']) {
+        assert.ok(dockerignore.includes(secret), `${secret} must never be copied into the image`);
+    }
+
+    const dockerfile = read('Dockerfile');
+    assert.match(dockerfile, /apk add[^\n]*\bgit\b/, 'the image needs git at runtime for .update');
+    assert.match(dockerfile, /RESTART_SUPERVISED=true/, 'the image must mark itself supervised');
+
+    // A second connection on the same credentials triggers a 401 conflict, so
+    // the process manager must never fork more than one worker.
+    const pm2 = require(path.join(root, 'ecosystem.config.js')).apps[0];
+    assert.strictEqual(pm2.instances, 1, 'only one instance may hold the WhatsApp session');
+    assert.strictEqual(pm2.exec_mode, 'fork', 'cluster mode would open a second conflicting socket');
+    assert.ok(pm2.autorestart, 'pm2 must restart the bot');
+    assert.ok(pm2.restart_delay >= 1000, 'a restart delay avoids hammering WhatsApp in a boot loop');
+
+    console.log('Deployment tests passed: session persistence, single instance and .update support verified.');
+}

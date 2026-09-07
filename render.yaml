@@ -1,0 +1,29 @@
+# Render blueprint. A worker has no HTTP port, which suits a WhatsApp bot.
+services:
+  - type: worker
+    name: toosii-xd-ultra
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: node index.js
+    autoDeploy: true
+    envVars:
+      - key: OWNER_NUMBER
+        sync: false
+      - key: SESSION_ID
+        sync: false
+      - key: PREFIX
+        value: "."
+      - key: BOT_NAME
+        value: TOOSII-XD-ULTRA
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      # Render restarts a failed worker, so .restart may exit safely.
+      - key: RESTART_SUPERVISED
+        value: "true"
+    disk:
+      # session/ holds the Signal keys. On an ephemeral filesystem the bot is
+      # logged out on every deploy, so it needs a real disk.
+      name: session
+      mountPath: /opt/render/project/src/session
+      sizeGB: 1

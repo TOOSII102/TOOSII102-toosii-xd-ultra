@@ -1,8 +1,13 @@
 {
   "name": "TOOSII-XD-ULTRA",
-  "description": "TOOSII-XD-ULTRA — Baileys WhatsApp bot with prefix commands",
+  "description": "TOOSII-XD-ULTRA \u2014 Baileys WhatsApp bot with prefix commands",
   "repository": "https://github.com/TOOSII102/TOOSII102-toosii-xd-ultra",
-  "keywords": ["whatsapp", "baileys", "bot", "nodejs"],
+  "keywords": [
+    "whatsapp",
+    "baileys",
+    "bot",
+    "nodejs"
+  ],
   "stack": "container",
   "env": {
     "SESSION_ID": {
@@ -24,9 +29,28 @@
     "RATE_LIMIT_ENABLED": {
       "description": "Persistent per-user anti-spam limits.",
       "value": "true"
+    },
+    "RESTART_SUPERVISED": {
+      "description": "Lets the owner-only .restart command exit, relying on the platform to start the process again.",
+      "value": "true"
+    },
+    "TOOSII_API_BASE_URL": {
+      "description": "Optional override for the primary media/AI API base URL.",
+      "required": false
+    },
+    "MOVIE_API_BASE_URL": {
+      "description": "Optional override for the movie API base URL.",
+      "required": false
+    },
+    "TOOSII_TECH_BASE_URL": {
+      "description": "Optional override for the Toosii Tech developer API base URL.",
+      "required": false
     }
   },
   "formation": {
-    "worker": { "quantity": 1, "size": "eco" }
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
   }
 }

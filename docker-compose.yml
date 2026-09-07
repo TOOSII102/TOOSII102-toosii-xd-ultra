@@ -1,0 +1,24 @@
+# Run the bot with a restart policy and persistent session storage:
+#   docker compose up -d --build
+#   docker compose logs -f
+services:
+  bot:
+    build: .
+    container_name: toosii-xd-ultra
+    # Without this the bot stays down after a crash, and .restart would end the
+    # bot rather than restart it.
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RESTART_SUPERVISED: "true"
+    volumes:
+      # Named volumes so the WhatsApp session and runtime state survive a
+      # rebuild. Losing session/ means re-linking the device from scratch.
+      - session:/app/session
+      - data:/app/data
+    stop_grace_period: 20s
+
+volumes:
+  session:
+  data:
