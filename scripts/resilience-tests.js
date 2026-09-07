@@ -258,3 +258,82 @@ run().catch((error) => {
 
     console.log('Deployment tests passed: session persistence, single instance and .update support verified.');
 }
+
+// --- session preservation ---------------------------------------------------
+// Baileys rotates keys constantly and writes them to creds.json, so the
+// SESSION_ID string in .env is stale the moment the bot connects. Restoring it
+// over a live session resets the ratchet state and logs the device out. Because
+// loadSessionFromId runs on every start AND every reconnect, that used to
+// happen on each reconnect and after .update or .restart.
+{
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+
+    const encode = (object) => `TOOSII-XD:${Buffer.from(JSON.stringify(object)).toString('base64')}`;
+    const stale = { me: { id: '254100000000:1@s.whatsapp.net' }, registered: true, key: 'STALE' };
+
+    function runLoader(dir, sessionId) {
+        // config.js reads SESSION_ID at require time, so a child process is the
+        // only honest way to exercise a different value.
+        const script =
+            "const {loadSessionFromId}=require(process.argv[1]);" +
+            "process.stdout.write(String(loadSessionFromId()));";
+        const result = require('child_process').spawnSync(
+            process.execPath,
+            ['-e', script, path.join(__dirname, '..', 'lib', 'sessionLoader.js')],
+            { env: { ...process.env, SESSION_DIR: dir, SESSION_ID: sessionId || '' }, encoding: 'utf-8' }
+        );
+        return result.stdout.trim().endsWith('true');
+    }
+
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'toosii-session-guard-'));
+
+    // A live session must win over a stale SESSION_ID.
+    const liveDir = path.join(base, 'live');
+    fs.mkdirSync(liveDir);
+    const live = { me: { id: '254141193285:7@s.whatsapp.net' }, registered: true, key: 'LIVE' };
+    fs.writeFileSync(path.join(liveDir, 'creds.json'), JSON.stringify(live));
+    assert.ok(runLoader(liveDir, encode(stale)), 'an existing session must be reported as usable');
+    assert.deepStrictEqual(
+        JSON.parse(fs.readFileSync(path.join(liveDir, 'creds.json'), 'utf-8')),
+        live,
+        'a live session must never be overwritten by the SESSION_ID in .env'
+    );
+
+    // A first run has nothing to protect, so SESSION_ID must still bootstrap it.
+    const freshDir = path.join(base, 'fresh');
+    fs.mkdirSync(freshDir);
+    assert.ok(runLoader(freshDir, encode(stale)), 'a first run must adopt SESSION_ID');
+    assert.strictEqual(
+        JSON.parse(fs.readFileSync(path.join(freshDir, 'creds.json'), 'utf-8')).me.id,
+        stale.me.id,
+        'the first run must write the supplied session'
+    );
+
+    // A corrupt file authenticates nothing, so replacing it loses nothing.
+    const brokenDir = path.join(base, 'broken');
+    fs.mkdirSync(brokenDir);
+    fs.writeFileSync(path.join(brokenDir, 'creds.json'), 'not json{{{');
+    assert.ok(runLoader(brokenDir, encode(stale)), 'a corrupt session must be recoverable from SESSION_ID');
+    assert.strictEqual(
+        JSON.parse(fs.readFileSync(path.join(brokenDir, 'creds.json'), 'utf-8')).me.id,
+        stale.me.id,
+        'a corrupt session must be replaced'
+    );
+
+    // session/ must stay untracked, or .update could overwrite it via git.
+    const gitignore = fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf-8');
+    assert.match(gitignore, /^session\/$/m, 'session/ must be gitignored so .update cannot clobber it');
+
+    // .update must never run a command that discards untracked files.
+    const maintenance = fs.readFileSync(
+        path.join(__dirname, '..', 'commands', 'owner', 'maintenance.js'), 'utf-8');
+    for (const destructive of ['clean', 'reset', 'checkout']) {
+        assert.ok(!new RegExp(`git\\(\\['${destructive}'`).test(maintenance),
+            `.update must not run git ${destructive}: it would delete the session`);
+    }
+
+    fs.rmSync(base, { recursive: true, force: true });
+    console.log('Session guard tests passed: a live session survives restart, update and reconnect.');
+}
