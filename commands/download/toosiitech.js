@@ -30,7 +30,7 @@ function command(name, aliases, description, category, execute) {
         category,
         execute: async (sock, msg, args, ctx) => {
             try {
-                const verdict = await checkRateLimit(ctx.sender || ctx.from, 'media');
+                const verdict = checkRateLimit('download', ctx.sender || ctx.from);
                 if (!verdict.allowed) throw new Error(verdict.reason || 'Please wait a moment before trying again.');
                 await execute(sock, msg, args, ctx);
             } catch (error) {

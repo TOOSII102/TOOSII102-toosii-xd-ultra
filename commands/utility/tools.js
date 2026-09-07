@@ -22,7 +22,7 @@ function getInput(args, usage) {
 // These commands call third-party services, so they share the media limiter to
 // stop one user hammering an upstream the whole bot depends on.
 async function guard(ctx) {
-    const verdict = await checkRateLimit(ctx.sender || ctx.from, 'media');
+    const verdict = checkRateLimit('download', ctx.sender || ctx.from);
     if (!verdict.allowed) throw new Error(verdict.reason || 'Please wait a moment before trying again.');
 }
 
@@ -186,8 +186,14 @@ module.exports = [
     command('qr', ['qrcode'], 'Turn text into a QR code image.', async (sock, msg, args, ctx) => {
         const text = getInput(args, `${ctx.prefix}qr <text>  e.g. ${ctx.prefix}qr https://example.com`);
         // Rendered locally rather than through a third party, so nothing that is
-        // encoded ever leaves the host.
-        const QRCode = require('qrcode');
+        // encoded ever leaves the host. Required lazily and reported clearly:
+        // a missing optional dependency should name the fix, not dump a stack.
+        let QRCode;
+        try {
+            QRCode = require('qrcode');
+        } catch {
+            throw new Error('QR generation is unavailable: the qrcode package is not installed. Run npm install.');
+        }
         const buffer = await QRCode.toBuffer(text, { width: 512, margin: 2, errorCorrectionLevel: 'M' });
         await sock.sendMessage(ctx.from, {
             image: buffer,

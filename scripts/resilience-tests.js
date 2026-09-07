@@ -337,3 +337,58 @@ run().catch((error) => {
     fs.rmSync(base, { recursive: true, force: true });
     console.log('Session guard tests passed: a live session survives restart, update and reconnect.');
 }
+
+// --- rate-limit call convention --------------------------------------------
+// checkRateLimit(scope, sender) throws on an unknown scope. Four command
+// modules called it as (sender, scope) with a scope of 'media', so every one of
+// those commands answered "Unknown rate-limit scope" instead of doing its job.
+// The existing tests all ran with RATE_LIMIT_ENABLED=false, which returns early
+// and never reaches the scope lookup, so the fault was invisible.
+{
+    const fs = require('fs');
+    const path = require('path');
+    const { checkRateLimit } = require('../lib/rateLimiter');
+
+    const VALID_SCOPES = ['ai', 'download'];
+    for (const scope of VALID_SCOPES) {
+        const verdict = checkRateLimit(scope, `convention-${scope}@s.whatsapp.net`);
+        assert.ok(typeof verdict.allowed === 'boolean', `${scope} must be a valid scope`);
+    }
+    assert.throws(() => checkRateLimit('media', 'x@s.whatsapp.net'),
+        /Unknown rate-limit scope/, "'media' is not a scope and must throw");
+    assert.throws(() => checkRateLimit('250650734669864@lid', 'download'),
+        /Unknown rate-limit scope/, 'passing the sender first must throw');
+
+    // Every call site must put the scope first and use a real scope name.
+    const commandsDir = path.join(__dirname, '..', 'commands');
+    const files = [];
+    (function walk(dir) {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) walk(full);
+            else if (entry.name.endsWith('.js')) files.push(full);
+        }
+    })(commandsDir);
+
+    const callPattern = /checkRateLimit\(\s*([^,)]+)/g;
+    for (const file of files) {
+        const source = fs.readFileSync(file, 'utf-8');
+        let match;
+        while ((match = callPattern.exec(source)) !== null) {
+            const firstArg = match[1].trim().replace(/^['"]|['"]$/g, '');
+            assert.ok(VALID_SCOPES.includes(firstArg),
+                `${path.relative(commandsDir, file)} calls checkRateLimit with "${firstArg}" first; ` +
+                `the scope must come first and be one of ${VALID_SCOPES.join(', ')}`);
+        }
+    }
+
+    // Declared dependencies must actually resolve, or a command that requires
+    // one lazily fails only when a user runs it.
+    const pkg = require(path.join(__dirname, '..', 'package.json'));
+    for (const dependency of Object.keys(pkg.dependencies || {})) {
+        assert.doesNotThrow(() => require.resolve(dependency),
+            `${dependency} is declared in package.json but cannot be resolved; run npm install`);
+    }
+
+    console.log('Rate-limit convention tests passed: scope-first calls verified and dependencies resolve.');
+}
